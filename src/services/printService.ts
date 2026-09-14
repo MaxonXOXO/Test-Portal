@@ -153,18 +153,17 @@ export function printCandidateAnswerSheet(
       margin-bottom: 18px;
     }
     .crest-box {
-      width: 58px;
-      height: 58px;
-      border-radius: 8px;
-      background: #0f2b4d;
-      color: #fff;
+      width: 60px;
+      height: 60px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 800;
-      font-size: 20px;
-      border: 2px solid #d97706;
       flex-shrink: 0;
+    }
+    .crest-img {
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
     }
     .header-text h2 {
       font-size: 17px;
@@ -380,7 +379,9 @@ export function printCandidateAnswerSheet(
   <div class="sheet-wrapper">
     <!-- Header -->
     <div class="college-header">
-      <div class="crest-box">CPC</div>
+      <div class="crest-box">
+        <img src="/carmel.png" alt="Carmel Polytechnic Logo" class="crest-img" />
+      </div>
       <div class="header-text">
         <h2>CARMEL POLYTECHNIC COLLEGE PUNNAPRA</h2>
         <h4>Govt. Aided Technical Institution | Alappuzha, Kerala - 688004</h4>
@@ -583,18 +584,17 @@ export function printMasterCandidateList(
       margin-bottom: 18px;
     }
     .crest-box {
-      width: 58px;
-      height: 58px;
-      border-radius: 8px;
-      background: #0f2b4d;
-      color: #fff;
+      width: 60px;
+      height: 60px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 800;
-      font-size: 20px;
-      border: 2px solid #d97706;
       flex-shrink: 0;
+    }
+    .crest-img {
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
     }
     .header-text h2 {
       font-size: 18px;
@@ -743,7 +743,9 @@ export function printMasterCandidateList(
 
   <div class="sheet-wrapper">
     <div class="college-header">
-      <div class="crest-box">CPC</div>
+      <div class="crest-box">
+        <img src="/carmel.png" alt="Carmel Polytechnic Logo" class="crest-img" />
+      </div>
       <div class="header-text">
         <h2>CARMEL POLYTECHNIC COLLEGE PUNNAPRA</h2>
         <h4>Office of the Controller of Examinations | Punnapra, Alappuzha, Kerala</h4>

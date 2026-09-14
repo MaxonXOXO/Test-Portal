@@ -111,6 +111,14 @@ html, body {
   gap: 0.85rem;
 }
 
+.inst-logo-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+}
+
 .inst-logo-badge {
   width: 46px;
   height: 46px;
@@ -154,28 +162,15 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
+  padding: 0.4rem 0.85rem;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-full);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--accent-300);
   backdrop-filter: blur(8px);
-}
-
-.inst-portal-badge .dot {
-  width: 7px;
-  height: 7px;
-  background-color: var(--success-500);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--success-500);
-  animation: pulse-dot 2s infinite ease-in-out;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.85); }
 }
 
 .btn-header-switch {

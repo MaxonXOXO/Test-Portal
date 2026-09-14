@@ -129,6 +129,22 @@ export const App: React.FC = () => {
     return () => unsubscribe();
   }, [activeCandidateId, candidateStep]);
 
+  // Synchronize state across tabs via native StorageEvent (essential for multi-tab sessions on Vercel)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'carmel_exam_app_state' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setAppState(parsed);
+        } catch (err) {
+          console.error('Failed to parse cross-tab storage update:', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Candidate login success -> Go to instructions
   const handleCandidateLoginSuccess = (cand: Candidate) => {
     setActiveCandidateId(cand.id);

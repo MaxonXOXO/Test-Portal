@@ -1,6 +1,5 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { CheckCircle2, FileCheck, LogOut } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import type { Candidate, ExamConfig } from '../../types';
 
 interface CompletionScreenProps {
@@ -16,19 +15,6 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
   totalQuestions,
   onLogout,
 }) => {
-  useEffect(() => {
-    // Elegant celebratory burst
-    try {
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.6 },
-        colors: ['#0f2b4d', '#e59819', '#10b981', '#ffffff'],
-      });
-    } catch {
-      // safe fallback if canvas is restricted
-    }
-  }, []);
 
   const attemptedCount = Object.keys(candidate.answers || {}).length;
   const submissionTime = candidate.completedAt

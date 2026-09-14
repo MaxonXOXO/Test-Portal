@@ -82,6 +82,11 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
     <div className="onboarding-wrapper">
       <div className="login-card">
         <div className="login-header-banner">
+          <img
+            src="/carmel.png"
+            alt="Carmel Polytechnic Emblem"
+            style={{ width: '56px', height: '56px', objectFit: 'contain', margin: '0 auto 0.65rem auto', display: 'block' }}
+          />
           <h2>Candidate Assessment Portal</h2>
           <p>Carmel Polytechnic College Punnapra Online Examination System</p>
         </div>

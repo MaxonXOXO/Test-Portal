@@ -18,7 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="inst-header">
       <div className="inst-header-inner">
         <div className="inst-brand">
-          <div className="inst-logo-badge">CPC</div>
+          <img src="/carmel.png" alt="Carmel Polytechnic Logo" className="inst-logo-img" />
           <div className="inst-title-block">
             <h1>CARMEL POLYTECHNIC COLLEGE PUNNAPRA</h1>
             <p>Govt. Aided Technical Institution | Punnapra, Alappuzha - 688004</p>
@@ -27,7 +27,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div className="inst-nav-actions">
           <span className="inst-portal-badge">
-            <span className="dot" />
             {currentView === 'admin' ? 'ADMIN CONTROL CENTER' : 'CANDIDATE EXAM PORTAL'}
           </span>
 
