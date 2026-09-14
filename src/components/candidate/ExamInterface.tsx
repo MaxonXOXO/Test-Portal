@@ -337,18 +337,18 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.75rem' }}>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--neutral-500)', display: 'block' }}>
+        <div className="exam-meta-right">
+          <div className="exam-progress-box">
+            <span className="exam-progress-label">
               Attempted Progress
             </span>
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary-700)' }}>
+            <span className="exam-progress-count">
               {answeredCount} of {orderedQuestions.length} Answered
             </span>
           </div>
 
           <div className={`exam-timer-card exam-timer-large ${isWarningTime ? 'warning-time' : ''}`}>
-            <Clock size={28} />
+            <Clock size={24} className="timer-icon" />
             <div>
               <span className="timer-label">Time Remaining</span>
               <span className="timer-digits-large">{formatTimer(remainingSeconds)}</span>

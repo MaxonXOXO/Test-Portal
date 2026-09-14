@@ -151,7 +151,7 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
               />
             </div>
             <span style={{ fontSize: '0.72rem', color: 'var(--neutral-500)' }}>
-              Default session password: <strong>{examConfig.commonPassword}</strong>
+              Authorized examinees should enter the examination password provided by the invigilator
             </span>
           </div>
 
@@ -170,21 +170,6 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
             <span>Proceed to Examination</span>
             <ArrowRight size={18} />
           </button>
-
-          <div style={{
-            background: 'var(--neutral-50)',
-            padding: '0.75rem 1rem',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--neutral-200)',
-            fontSize: '0.78rem',
-            color: 'var(--neutral-600)'
-          }}>
-            <strong>Quick Demo Login:</strong>
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.25rem' }}>
-              <span>Phone: <code>9876543210</code></span>
-              <span>Password: <code>{examConfig.commonPassword}</code></span>
-            </div>
-          </div>
         </form>
       </div>
     </div>

@@ -11,7 +11,7 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   globalRestartTimestamp: null,
   randomizeQuestions: true,
   autoSubmitOnTimeUp: true,
-  adminPin: '1234',
+  adminPin: 'admin@carmelpoly.in',
 };
 
 export const INITIAL_QUESTIONS: Question[] = [
@@ -157,8 +157,12 @@ export function loadAppState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const examConfig = { ...DEFAULT_EXAM_CONFIG, ...parsed.examConfig };
+      if (examConfig.adminPin === '1234') {
+        examConfig.adminPin = 'admin@carmelpoly.in';
+      }
       return {
-        examConfig: { ...DEFAULT_EXAM_CONFIG, ...parsed.examConfig },
+        examConfig,
         candidates: parsed.candidates?.length ? parsed.candidates : INITIAL_CANDIDATES,
         questions: parsed.questions?.length ? parsed.questions : INITIAL_QUESTIONS,
       };

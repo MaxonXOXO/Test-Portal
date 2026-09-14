@@ -103,7 +103,7 @@ export const ExamSettings: React.FC<ExamSettingsProps> = ({
             <div className="form-group">
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <ShieldCheck size={16} color="var(--primary-700)" />
-                Admin Dashboard Access PIN
+                Admin Dashboard Access Password
               </label>
               <input
                 type="password"
@@ -113,7 +113,7 @@ export const ExamSettings: React.FC<ExamSettingsProps> = ({
                 required
               />
               <span style={{ fontSize: '0.72rem', color: 'var(--neutral-500)' }}>
-                PIN to switch from candidate portal to admin dashboard (Default: 1234)
+                Security password required to switch from candidate portal to admin control center
               </span>
             </div>
 

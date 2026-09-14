@@ -132,7 +132,7 @@ export const App: React.FC = () => {
   // Synchronize state across tabs via native StorageEvent (essential for multi-tab sessions on Vercel)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'carmel_exam_app_state' && e.newValue) {
+      if (e.key === 'carmel_polytechnic_portal_v1' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           setAppState(parsed);

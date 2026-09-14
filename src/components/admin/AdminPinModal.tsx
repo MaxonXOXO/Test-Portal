@@ -39,16 +39,16 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <p style={{ fontSize: '0.85rem', color: 'var(--neutral-600)' }}>
-              Enter the administrator access PIN to manage exam roster, questions, and live candidate timers.
+              Enter the administrator access password to manage exam roster, questions, and live candidate timers.
             </p>
 
             <div className="form-group">
-              <label>Admin Security PIN</label>
+              <label>Admin Access Password</label>
               <div className="input-with-icon">
                 <KeyRound className="input-icon" size={18} />
                 <input
                   type="password"
-                  placeholder="Enter 4-digit PIN"
+                  placeholder="Enter administrator password"
                   value={pin}
                   onChange={(e) => {
                     setPin(e.target.value);
@@ -62,13 +62,9 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
 
             {error && (
               <div className="alert-box alert-error" style={{ fontSize: '0.8rem' }}>
-                Incorrect administrator PIN. Access denied.
+                Incorrect administrator password. Access denied.
               </div>
             )}
-
-            <div style={{ fontSize: '0.75rem', color: 'var(--neutral-500)', background: 'var(--neutral-50)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)' }}>
-              Default Admin PIN: <strong>{correctPin}</strong>
-            </div>
           </div>
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-outline">
