@@ -1,13 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import type { Candidate, Question, ExamConfig, AppState, SyncMessage } from './types';
+import type { Candidate, Question, ExamConfig, AppState, SyncMessage, ExamStatus } from './types';
 import {
   loadAppState,
   saveAppState,
+  clearLocalAppState,
   shuffleArray,
   checkAndAutoCompleteCandidates,
   calculateCandidateScore,
+  DEFAULT_EXAM_CONFIG,
 } from './services/storage';
 import { examBroadcast } from './services/broadcast';
+import {
+  fetchAppStateFromSupabase,
+  syncExamConfigToSupabase,
+  syncQuestionsToSupabase,
+  syncCandidatesToSupabase,
+  upsertCandidateToSupabase,
+  updateCandidateExamProgressInSupabase,
+  submitCandidateInSupabase,
+  clearEntireSupabaseDatabase,
+  subscribeToSupabaseRealtime,
+} from './services/supabase';
 import { Header } from './components/common/Header';
 import { CandidateLogin } from './components/candidate/CandidateLogin';
 import { CandidateInstructions } from './components/candidate/CandidateInstructions';
@@ -18,7 +31,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AdminPinModal } from './components/admin/AdminPinModal';
 
 export const App: React.FC = () => {
-  // Master persistent state
+  // Master persistent state initialized from local cache for instant render
   const [appState, setAppState] = useState<AppState>(() => loadAppState());
   const { examConfig, candidates, questions } = appState;
 
@@ -34,12 +47,55 @@ export const App: React.FC = () => {
   // Find active candidate from candidates array
   const activeCandidate = candidates.find((c) => c.id === activeCandidateId) || null;
 
-  // Persist whenever state changes
+  // Persist locally whenever state changes
   useEffect(() => {
     saveAppState(appState);
   }, [appState]);
 
-  // Subscribe to real-time BroadcastChannel updates (Multi-tab synchronization)
+  // Initial remote fetch from Supabase to sync across devices & networks
+  useEffect(() => {
+    let isMounted = true;
+    fetchAppStateFromSupabase().then((remoteState) => {
+      if (isMounted && remoteState) {
+        setAppState(remoteState);
+        saveAppState(remoteState);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Supabase Realtime Subscription: Instant cross-network synchronization
+  useEffect(() => {
+    const unsubscribeRealtime = subscribeToSupabaseRealtime({
+      onConfigChange: (newConfig) => {
+        setAppState((prev) => ({ ...prev, examConfig: newConfig }));
+      },
+      onCandidateUpdate: (updatedCand) => {
+        setAppState((prev) => ({
+          ...prev,
+          candidates: prev.candidates.map((c) => (c.id === updatedCand.id ? updatedCand : c)),
+        }));
+      },
+      onCandidatesChange: async () => {
+        const remote = await fetchAppStateFromSupabase();
+        if (remote) {
+          setAppState((prev) => ({ ...prev, candidates: remote.candidates }));
+        }
+      },
+      onQuestionsChange: async () => {
+        const remote = await fetchAppStateFromSupabase();
+        if (remote) {
+          setAppState((prev) => ({ ...prev, questions: remote.questions }));
+        }
+      },
+    });
+
+    return () => unsubscribeRealtime();
+  }, []);
+
+  // Subscribe to real-time BroadcastChannel updates (Multi-tab local synchronization)
   useEffect(() => {
     const unsubscribe = examBroadcast.subscribe((msg: SyncMessage) => {
       if (msg.type === 'CANDIDATE_PROGRESS') {
@@ -125,13 +181,30 @@ export const App: React.FC = () => {
         if (activeCandidateId && candidateStep !== 'LOGIN') {
           setCandidateStep('EXAM');
         }
+      } else if (msg.type === 'EXAM_STATUS_CHANGE') {
+        setAppState((prev) => ({
+          ...prev,
+          examConfig: {
+            ...prev.examConfig,
+            examStatus: msg.status,
+            isExamLive: msg.status === 'RUNNING',
+          },
+        }));
+      } else if (msg.type === 'DATABASE_CLEARED') {
+        setAppState({
+          examConfig: { ...DEFAULT_EXAM_CONFIG, examStatus: 'STOPPED', isExamLive: false },
+          candidates: [],
+          questions: [],
+        });
+        setActiveCandidateId(null);
+        setCandidateStep('LOGIN');
       }
     });
 
     return () => unsubscribe();
   }, [activeCandidateId, candidateStep]);
 
-  // Synchronize state across tabs via native StorageEvent (essential for multi-tab sessions on Vercel)
+  // Synchronize state across tabs via native StorageEvent
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'carmel_polytechnic_portal_v1' && e.newValue) {
@@ -158,10 +231,11 @@ export const App: React.FC = () => {
         );
         if (!hasChanges) return prev;
 
-        // If the active candidate expired, broadcast submit and move to COMPLETED screen
+        // If active candidate expired, broadcast submit and move to COMPLETED screen
         if (activeCandidateId) {
           const activeNow = updated.find((c) => c.id === activeCandidateId);
           if (activeNow && activeNow.status === 'COMPLETED' && candidateStep === 'EXAM') {
+            submitCandidateInSupabase(activeNow);
             examBroadcast.broadcast({
               type: 'CANDIDATE_SUBMIT',
               candidateId: activeNow.id,
@@ -185,6 +259,7 @@ export const App: React.FC = () => {
   // Candidate login success -> Go to instructions
   const handleCandidateLoginSuccess = (cand: Candidate) => {
     setActiveCandidateId(cand.id);
+    upsertCandidateToSupabase(cand);
 
     // Verify if time has expired
     const effectiveStart = Math.max(
@@ -208,6 +283,7 @@ export const App: React.FC = () => {
           ...prev,
           candidates: prev.candidates.map((c) => (c.id === cand.id ? completedCand : c)),
         }));
+        submitCandidateInSupabase(completedCand);
       }
       setCandidateStep('COMPLETED');
     } else if (cand.status === 'REVOKED') {
@@ -222,7 +298,6 @@ export const App: React.FC = () => {
     if (!activeCandidate) return;
     const now = Date.now();
 
-    // Check if exam duration has already expired for this candidate
     const effectiveStart = Math.max(
       activeCandidate.startedAt || 0,
       activeCandidate.restartedAt || 0,
@@ -241,6 +316,7 @@ export const App: React.FC = () => {
         ...prev,
         candidates: prev.candidates.map((c) => (c.id === completedCand.id ? completedCand : c)),
       }));
+      submitCandidateInSupabase(completedCand);
       setCandidateStep('COMPLETED');
       return;
     }
@@ -261,15 +337,22 @@ export const App: React.FC = () => {
       candidates: prev.candidates.map((c) => (c.id === updated.id ? updated : c)),
     }));
 
+    upsertCandidateToSupabase(updated);
     setCandidateStep('EXAM');
   };
 
-  // Update candidate state as answers change
+  // Update candidate state as answers change (Syncs live to Supabase & BroadcastChannel)
   const handleCandidateUpdate = (updated: Candidate) => {
     setAppState((prev) => ({
       ...prev,
       candidates: prev.candidates.map((c) => (c.id === updated.id ? updated : c)),
     }));
+
+    updateCandidateExamProgressInSupabase(
+      updated.id,
+      updated.answers || {},
+      updated.currentQuestionIndex || 0
+    );
   };
 
   // Candidate finishes exam (Auto or Manual)
@@ -278,6 +361,8 @@ export const App: React.FC = () => {
       ...prev,
       candidates: prev.candidates.map((c) => (c.id === finalCandidate.id ? finalCandidate : c)),
     }));
+
+    submitCandidateInSupabase(finalCandidate);
 
     examBroadcast.broadcast({
       type: 'CANDIDATE_SUBMIT',
@@ -315,6 +400,7 @@ export const App: React.FC = () => {
       ...prev,
       candidates: newCandidates,
     }));
+    syncCandidatesToSupabase(newCandidates);
   };
 
   // Admin Actions: Update Questions Bank
@@ -323,6 +409,7 @@ export const App: React.FC = () => {
       ...prev,
       questions: newQuestions,
     }));
+    syncQuestionsToSupabase(newQuestions);
   };
 
   // Admin Actions: Update Exam Config
@@ -331,10 +418,28 @@ export const App: React.FC = () => {
       ...prev,
       examConfig: newConfig,
     }));
+    syncExamConfigToSupabase(newConfig);
+  };
+
+  // Admin Actions: Change Status (Play = RUNNING, Pause = PAUSED, Stop = STOPPED)
+  const handleStatusChange = (newStatus: ExamStatus) => {
+    const updatedConfig: ExamConfig = {
+      ...examConfig,
+      examStatus: newStatus,
+      isExamLive: newStatus === 'RUNNING',
+    };
+    setAppState((prev) => ({
+      ...prev,
+      examConfig: updatedConfig,
+    }));
+    syncExamConfigToSupabase(updatedConfig);
+    examBroadcast.broadcast({
+      type: 'EXAM_STATUS_CHANGE',
+      status: newStatus,
+    });
   };
 
   // Admin Action: Restart for specific person
-  // "When restarted for a person, The timer for them must start from that exact moment from which it was restarted"
   const handleRestartCandidate = (candidateId: string) => {
     const restartTime = Date.now();
     const target = candidates.find((c) => c.id === candidateId);
@@ -361,6 +466,8 @@ export const App: React.FC = () => {
       candidates: prev.candidates.map((c) => (c.id === candidateId ? updated : c)),
     }));
 
+    upsertCandidateToSupabase(updated);
+
     examBroadcast.broadcast({
       type: 'RESTART_CANDIDATE',
       candidateId,
@@ -374,12 +481,16 @@ export const App: React.FC = () => {
 
   // Admin Action: Revoke specific person
   const handleRevokeCandidate = (candidateId: string) => {
+    const updatedCandidates = candidates.map((c) =>
+      c.id === candidateId ? { ...c, status: 'REVOKED' as const, revokedAt: Date.now() } : c
+    );
     setAppState((prev) => ({
       ...prev,
-      candidates: prev.candidates.map((c) =>
-        c.id === candidateId ? { ...c, status: 'REVOKED', revokedAt: Date.now() } : c
-      ),
+      candidates: updatedCandidates,
     }));
+
+    const target = updatedCandidates.find((c) => c.id === candidateId);
+    if (target) upsertCandidateToSupabase(target);
 
     examBroadcast.broadcast({
       type: 'REVOKE_CANDIDATE',
@@ -393,12 +504,16 @@ export const App: React.FC = () => {
 
   // Admin Action: Reinstate specific person
   const handleReinstateCandidate = (candidateId: string) => {
+    const updatedCandidates = candidates.map((c) =>
+      c.id === candidateId ? { ...c, status: 'IN_PROGRESS' as const, revokedAt: null } : c
+    );
     setAppState((prev) => ({
       ...prev,
-      candidates: prev.candidates.map((c) =>
-        c.id === candidateId ? { ...c, status: 'IN_PROGRESS', revokedAt: null } : c
-      ),
+      candidates: updatedCandidates,
     }));
+
+    const target = updatedCandidates.find((c) => c.id === candidateId);
+    if (target) upsertCandidateToSupabase(target);
 
     examBroadcast.broadcast({
       type: 'REINSTATE_CANDIDATE',
@@ -411,33 +526,60 @@ export const App: React.FC = () => {
   };
 
   // Admin Action: Global Restart
-  // "it applies to global restarting as well, with admin having control to change the timing start time if needed"
   const handleGlobalRestart = () => {
     const restartTime = Date.now();
-    setAppState((prev) => ({
-      ...prev,
-      examConfig: {
-        ...prev.examConfig,
-        globalRestartTimestamp: restartTime,
-      },
-      candidates: prev.candidates.map((c) => {
-        if (c.status === 'IN_PROGRESS' || c.status === 'COMPLETED') {
-          return {
-            ...c,
-            status: 'IN_PROGRESS',
-            restartedAt: restartTime,
-            completedAt: null,
-            timeTakenSeconds: null,
-          };
-        }
-        return c;
-      }),
-    }));
+    const updatedConfig: ExamConfig = {
+      ...examConfig,
+      globalRestartTimestamp: restartTime,
+    };
+    const updatedCandidates = candidates.map((c) => {
+      if (c.status === 'IN_PROGRESS' || c.status === 'COMPLETED') {
+        return {
+          ...c,
+          status: 'IN_PROGRESS' as const,
+          restartedAt: restartTime,
+          completedAt: null,
+          timeTakenSeconds: null,
+        };
+      }
+      return c;
+    });
+
+    setAppState({
+      examConfig: updatedConfig,
+      candidates: updatedCandidates,
+      questions,
+    });
+
+    syncExamConfigToSupabase(updatedConfig);
+    syncCandidatesToSupabase(updatedCandidates);
 
     examBroadcast.broadcast({
       type: 'GLOBAL_RESTART',
       timestamp: restartTime,
     });
+  };
+
+  // Admin Action: Clear / Flush Entire Supabase Database
+  const handleClearDatabase = async () => {
+    await clearEntireSupabaseDatabase();
+    clearLocalAppState();
+
+    const resetState: AppState = {
+      examConfig: {
+        ...DEFAULT_EXAM_CONFIG,
+        examStatus: 'STOPPED',
+        isExamLive: false,
+      },
+      candidates: [],
+      questions: [],
+    };
+
+    setAppState(resetState);
+    setActiveCandidateId(null);
+    setCandidateStep('LOGIN');
+
+    examBroadcast.broadcast({ type: 'DATABASE_CLEARED' });
   };
 
   return (
@@ -511,6 +653,8 @@ export const App: React.FC = () => {
             onRevokeCandidate={handleRevokeCandidate}
             onReinstateCandidate={handleReinstateCandidate}
             onGlobalRestart={handleGlobalRestart}
+            onStatusChange={handleStatusChange}
+            onClearDatabase={handleClearDatabase}
             onExitAdmin={() => setCurrentView('candidate')}
           />
         )}

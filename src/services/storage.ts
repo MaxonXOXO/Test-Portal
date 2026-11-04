@@ -8,10 +8,12 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   commonPassword: 'CARMEL2026',
   durationMinutes: 30,
   isExamLive: true,
+  examStatus: 'RUNNING',
   globalRestartTimestamp: null,
   randomizeQuestions: true,
   autoSubmitOnTimeUp: true,
   adminPin: 'admin@carmelpoly.in',
+  applicationNumberPrefix: 'CARMEL',
 };
 
 export const INITIAL_QUESTIONS: Question[] = [
@@ -90,7 +92,7 @@ export const INITIAL_QUESTIONS: Question[] = [
 export const INITIAL_CANDIDATES: Candidate[] = [
   {
     id: 'c1',
-    applicationNumber: 'CARMEL-2026-001',
+    applicationNumber: 'CARMEL - 1',
     phone: '9876543210',
     name: 'Abhishek Rajesh',
     status: 'NOT_STARTED',
@@ -103,7 +105,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c2',
-    applicationNumber: 'CARMEL-2026-002',
+    applicationNumber: 'CARMEL - 2',
     phone: '9876543211',
     name: 'Ananya S. Kumar',
     status: 'NOT_STARTED',
@@ -116,7 +118,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c3',
-    applicationNumber: 'CARMEL-2026-003',
+    applicationNumber: 'CARMEL - 3',
     phone: '9876543212',
     name: 'Midhun Varghese',
     status: 'NOT_STARTED',
@@ -129,7 +131,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c4',
-    applicationNumber: 'CARMEL-2026-004',
+    applicationNumber: 'CARMEL - 4',
     phone: '9876543213',
     name: 'Sneha Mariam Roy',
     status: 'NOT_STARTED',
@@ -142,7 +144,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c5',
-    applicationNumber: 'CARMEL-2026-005',
+    applicationNumber: 'CARMEL - 5',
     phone: '9876543214',
     name: 'Rohit K. Nair',
     status: 'NOT_STARTED',
@@ -157,21 +159,26 @@ export const INITIAL_CANDIDATES: Candidate[] = [
 
 const STORAGE_KEY = 'carmel_polytechnic_portal_v1';
 
-// Candidate Application Number helper
-export function getCandidateAppNo(candidate: Candidate, fallbackIndex?: number): string {
+// Candidate Application Number helper with configurable prefix (e.g. "CARMEL - 1")
+export function getCandidateAppNo(
+  candidate: Candidate,
+  fallbackIndex?: number,
+  prefix: string = 'CARMEL'
+): string {
   if (candidate.applicationNumber && candidate.applicationNumber.trim()) {
     return candidate.applicationNumber.trim();
   }
   if (candidate.rollNo && candidate.rollNo.trim()) {
     return candidate.rollNo.trim();
   }
-  if (candidate.id && !candidate.id.startsWith('cand_')) {
-    return `APP-${candidate.id.toUpperCase()}`;
+  const cleanPrefix = (prefix || 'CARMEL').trim() || 'CARMEL';
+  if (fallbackIndex !== undefined) {
+    return `${cleanPrefix} - ${fallbackIndex + 1}`;
   }
   if (candidate.phone) {
-    return `APP-${candidate.phone.slice(-6)}`;
+    return `${cleanPrefix} - ${candidate.phone.slice(-6)}`;
   }
-  return fallbackIndex !== undefined ? `APP-${String(fallbackIndex + 1).padStart(3, '0')}` : 'N/A';
+  return `${cleanPrefix} - 1`;
 }
 
 // Automatically check and complete candidates whose exam time has expired
@@ -183,10 +190,11 @@ export function checkAndAutoCompleteCandidates(
   let hasChanges = false;
   const durationMs = examConfig.durationMinutes * 60 * 1000;
   const now = Date.now();
+  const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
 
   const updatedCandidates = candidates.map((cand, idx) => {
     // Ensure applicationNumber is populated
-    const appNo = cand.applicationNumber || getCandidateAppNo(cand, idx);
+    const appNo = cand.applicationNumber || getCandidateAppNo(cand, idx, prefix);
     const withAppNo: Candidate = cand.applicationNumber ? cand : { ...cand, applicationNumber: appNo };
 
     if (cand.status !== 'IN_PROGRESS') {
@@ -223,10 +231,17 @@ export function loadAppState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const examConfig = { ...DEFAULT_EXAM_CONFIG, ...parsed.examConfig };
+      const examConfig: ExamConfig = { ...DEFAULT_EXAM_CONFIG, ...parsed.examConfig };
       if (examConfig.adminPin === '1234') {
         examConfig.adminPin = 'admin@carmelpoly.in';
       }
+      if (!examConfig.applicationNumberPrefix) {
+        examConfig.applicationNumberPrefix = 'CARMEL';
+      }
+      if (!examConfig.examStatus) {
+        examConfig.examStatus = examConfig.isExamLive ? 'RUNNING' : 'PAUSED';
+      }
+
       const rawCandidates = parsed.candidates?.length ? parsed.candidates : INITIAL_CANDIDATES;
       const questions = parsed.questions?.length ? parsed.questions : INITIAL_QUESTIONS;
 
@@ -259,6 +274,14 @@ export function saveAppState(state: AppState): void {
   }
 }
 
+export function clearLocalAppState(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (err) {
+    console.error('Failed to clear local app state:', err);
+  }
+}
+
 // Utility: Shuffle an array deterministically or randomly
 export function shuffleArray<T>(array: T[]): T[] {
   const arr = [...array];
@@ -279,23 +302,49 @@ export function normalizePhone(phone: string | number): string {
   return digits;
 }
 
+// Safe native Excel file download without opening blank browser tabs
+export function downloadExcelWorkbook(workbook: XLSX.WorkBook, filename: string): void {
+  try {
+    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+      URL.revokeObjectURL(url);
+    }, 200);
+  } catch (err) {
+    console.error('Error generating Excel file download:', err);
+  }
+}
+
 // ==================== EXCEL IMPORT & EXPORT ====================
 
 // Download Candidate Sample Template
-export function downloadCandidateTemplate(): void {
+export function downloadCandidateTemplate(prefix: string = 'CARMEL'): void {
+  const cleanPrefix = (prefix || 'CARMEL').trim() || 'CARMEL';
   const sampleData = [
     {
-      'Application Number': 'CARMEL-2026-001',
+      'Application Number': `${cleanPrefix} - 1`,
       'Candidate Name': 'Rahul Krishnan',
       'Phone Number': '9876543210',
     },
     {
-      'Application Number': 'CARMEL-2026-002',
+      'Application Number': `${cleanPrefix} - 2`,
       'Candidate Name': 'Fathima Noor',
       'Phone Number': '9876543211',
     },
     {
-      'Application Number': 'CARMEL-2026-003',
+      'Application Number': `${cleanPrefix} - 3`,
       'Candidate Name': 'Albin Joseph',
       'Phone Number': '9876543212',
     },
@@ -304,49 +353,53 @@ export function downloadCandidateTemplate(): void {
   const worksheet = XLSX.utils.json_to_sheet(sampleData);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidates');
-  XLSX.writeFile(workbook, 'Carmel_Candidates_Template.xlsx');
+  downloadExcelWorkbook(workbook, 'Carmel_Candidates_Template.xlsx');
 }
 
 // Download Question Sample Template
 export function downloadQuestionTemplate(): void {
   const sampleData = [
     {
-      'Question': 'Which is the SI unit of electric current?',
+      Question: 'Which is the SI unit of electric current?',
       'Option A': 'Volt',
       'Option B': 'Ampere',
       'Option C': 'Watt',
       'Option D': 'Ohm',
       'Correct Answer': 'B',
-      'Marks': 1,
+      Marks: 1,
     },
     {
-      'Question': 'The ratio of lateral strain to longitudinal strain is known as:',
+      Question: 'The ratio of lateral strain to longitudinal strain is known as:',
       'Option A': 'Poisson ratio',
       'Option B': 'Bulk modulus',
       'Option C': 'Modulus of rigidity',
       'Option D': 'Young modulus',
       'Correct Answer': 'A',
-      'Marks': 1,
+      Marks: 1,
     },
     {
-      'Question': 'Which gas is most abundant in the Earth atmosphere?',
+      Question: 'Which gas is most abundant in the Earth atmosphere?',
       'Option A': 'Oxygen',
       'Option B': 'Carbon dioxide',
       'Option C': 'Nitrogen',
       'Option D': 'Argon',
       'Correct Answer': 'C',
-      'Marks': 1,
+      Marks: 1,
     },
   ];
 
   const worksheet = XLSX.utils.json_to_sheet(sampleData);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Questions');
-  XLSX.writeFile(workbook, 'Carmel_Questions_Template.xlsx');
+  downloadExcelWorkbook(workbook, 'Carmel_Questions_Template.xlsx');
 }
 
-// Parse Candidate Excel File
-export async function parseCandidateExcel(file: File): Promise<Candidate[]> {
+// Parse Candidate Excel File with configurable Application Number Prefix
+export async function parseCandidateExcel(
+  file: File,
+  prefix: string = 'CARMEL',
+  existingCount: number = 0
+): Promise<Candidate[]> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheetName = workbook.SheetNames[0];
@@ -354,9 +407,9 @@ export async function parseCandidateExcel(file: File): Promise<Candidate[]> {
   const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' });
 
   const candidates: Candidate[] = [];
+  const cleanPrefix = (prefix || 'CARMEL').trim() || 'CARMEL';
 
   rows.forEach((row, idx) => {
-    // Find keys flexibly
     const phoneRaw =
       row['Phone Number'] || row['Phone'] || row['phone'] || row['Mobile'] || row['Contact'] || Object.values(row)[0];
     const nameRaw =
@@ -376,7 +429,12 @@ export async function parseCandidateExcel(file: File): Promise<Candidate[]> {
 
     const phone = normalizePhone(phoneRaw);
     const name = String(nameRaw).trim();
-    const applicationNumber = appNoRaw ? String(appNoRaw).trim() : `APP-${phone.slice(-6)}`;
+
+    // If application number is provided in excel, use that; otherwise auto-number with prefix
+    const applicationNumber =
+      appNoRaw && String(appNoRaw).trim()
+        ? String(appNoRaw).trim()
+        : `${cleanPrefix} - ${existingCount + idx + 1}`;
 
     if (phone && name) {
       candidates.push({
@@ -414,7 +472,9 @@ export async function parseQuestionExcel(file: File): Promise<Question[]> {
     const optB = row['Option B'] || row['OptionB'] || row['B'] || row['Option 2'] || '';
     const optC = row['Option C'] || row['OptionC'] || row['C'] || row['Option 3'] || '';
     const optD = row['Option D'] || row['OptionD'] || row['D'] || row['Option 4'] || '';
-    const correctRaw = String(row['Correct Answer'] || row['Answer'] || row['Correct'] || row['Key'] || 'A').toUpperCase().trim();
+    const correctRaw = String(row['Correct Answer'] || row['Answer'] || row['Correct'] || row['Key'] || 'A')
+      .toUpperCase()
+      .trim();
 
     let correctOption: 'A' | 'B' | 'C' | 'D' = 'A';
     if (['A', 'B', 'C', 'D'].includes(correctRaw)) {
@@ -441,10 +501,28 @@ export async function parseQuestionExcel(file: File): Promise<Question[]> {
   return questions;
 }
 
-// Export Results to Excel (For Admin Only)
+// Export Candidate Roster Excel (clean download, no extra tabs)
+export function exportCandidateRosterExcel(candidates: Candidate[], prefix: string = 'CARMEL'): void {
+  const exportData = candidates.map((c, idx) => ({
+    'Sl No': idx + 1,
+    'Application Number': c.applicationNumber || getCandidateAppNo(c, idx, prefix),
+    'Candidate Name': c.name,
+    'Mobile Phone': c.phone,
+    Status: c.status,
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidates Roster');
+  const filename = `Carmel_Candidates_Roster_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  downloadExcelWorkbook(workbook, filename);
+}
+
+// Export Results to Excel (clean download, no extra tabs)
 export function exportResultsExcel(candidates: Candidate[], questions: Question[], config: ExamConfig): void {
   const { candidates: resolvedCandidates } = checkAndAutoCompleteCandidates(candidates, questions, config);
   const totalPossibleScore = questions.reduce((sum, q) => sum + q.marks, 0);
+  const prefix = config.applicationNumberPrefix || 'CARMEL';
 
   const exportData = resolvedCandidates.map((cand, index) => {
     const answeredCount = Object.keys(cand.answers || {}).length;
@@ -456,14 +534,14 @@ export function exportResultsExcel(candidates: Candidate[], questions: Question[
 
     return {
       'Sl No': index + 1,
-      'Application Number': cand.applicationNumber || getCandidateAppNo(cand, index),
+      'Application Number': cand.applicationNumber || getCandidateAppNo(cand, index, prefix),
       'Candidate Name': cand.name,
       'Phone Number': cand.phone,
       'Exam Status': cand.status,
       'Questions Attempted': `${answeredCount} / ${questions.length}`,
-      'Score': cand.score,
+      Score: cand.score,
       'Total Marks': totalPossibleScore,
-      'Percentage': percentage,
+      Percentage: percentage,
       'Time Started': cand.startedAt ? new Date(cand.startedAt).toLocaleTimeString() : 'N/A',
       'Completion Time': cand.completedAt ? new Date(cand.completedAt).toLocaleTimeString() : 'N/A',
       'Duration Taken': timeTakenFormatted,
@@ -474,7 +552,7 @@ export function exportResultsExcel(candidates: Candidate[], questions: Question[
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Exam Results');
   const filename = `Carmel_Polytechnic_Results_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  XLSX.writeFile(workbook, filename);
+  downloadExcelWorkbook(workbook, filename);
 }
 
 // Calculate candidate score

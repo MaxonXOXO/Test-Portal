@@ -11,7 +11,7 @@ import {
   UserPlus,
   XCircle,
 } from 'lucide-react';
-import type { Candidate, Question } from '../../types';
+import type { Candidate, Question, ExamConfig } from '../../types';
 import {
   downloadCandidateTemplate,
   downloadQuestionTemplate,
@@ -19,11 +19,13 @@ import {
   parseQuestionExcel,
   normalizePhone,
   getCandidateAppNo,
+  exportCandidateRosterExcel,
 } from '../../services/storage';
 
 interface ExcelManagerProps {
   candidates: Candidate[];
   questions: Question[];
+  examConfig: ExamConfig;
   onUpdateCandidates: (candidates: Candidate[]) => void;
   onUpdateQuestions: (questions: Question[]) => void;
 }
@@ -31,10 +33,13 @@ interface ExcelManagerProps {
 export const ExcelManager: React.FC<ExcelManagerProps> = ({
   candidates,
   questions,
+  examConfig,
   onUpdateCandidates,
   onUpdateQuestions,
 }) => {
   const [activeSection, setActiveSection] = useState<'candidates' | 'questions'>('candidates');
+
+  const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
 
   // Candidate upload state
   const [candidateFileLoading, setCandidateFileLoading] = useState(false);
@@ -84,14 +89,13 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
     setCandidateFileLoading(true);
     setCandidateUploadMsg(null);
     try {
-      const parsed = await parseCandidateExcel(file);
+      const parsed = await parseCandidateExcel(file, prefix, candidates.length);
       if (parsed.length === 0) {
         setCandidateUploadMsg({
           type: 'error',
           text: 'No valid candidate entries found in the file. Ensure phone and name columns exist.',
         });
       } else {
-        // Merge or replace
         const existingPhones = new Set(candidates.map((c) => normalizePhone(c.phone)));
         const newOnes = parsed.filter((c) => !existingPhones.has(normalizePhone(c.phone)));
 
@@ -155,7 +159,8 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
       return;
     }
 
-    const applicationNumber = newCand.applicationNumber.trim() || `CARMEL-2026-${String(candidates.length + 1).padStart(3, '0')}`;
+    const applicationNumber =
+      newCand.applicationNumber.trim() || `${prefix} - ${candidates.length + 1}`;
 
     const created: Candidate = {
       id: `cand_${Date.now()}`,
@@ -224,6 +229,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
       {/* Sub tabs */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
         <button
+          type="button"
           onClick={() => setActiveSection('candidates')}
           className={`btn ${activeSection === 'candidates' ? 'btn-primary' : 'btn-outline'}`}
         >
@@ -232,6 +238,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveSection('questions')}
           className={`btn ${activeSection === 'questions' ? 'btn-primary' : 'btn-outline'}`}
         >
@@ -251,7 +258,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
               </h3>
               <p style={{ fontSize: '0.82rem', color: 'var(--neutral-600)', marginBottom: '1rem' }}>
                 Upload an Excel sheet containing candidate phone numbers and names.
-                Candidates log in with only their mobile number while their details are pulled automatically.
+                If Application Numbers are in the sheet, they are automatically preserved; otherwise, numbered as {prefix} - 1, {prefix} - 2, etc.
               </p>
 
               <div
@@ -263,7 +270,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                   {candidateFileLoading ? 'Parsing Excel File...' : 'Click to Browse Candidate Excel (.xlsx / .csv)'}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--neutral-500)', marginTop: '0.25rem' }}>
-                  Supported columns: Phone Number, Candidate Name
+                  Supported columns: Phone Number, Candidate Name, Application Number (Optional)
                 </div>
                 <input
                   ref={candidateInputRef}
@@ -293,10 +300,10 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
             <div className="table-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <div>
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--primary-900)', marginBottom: '0.4rem' }}>
-                  Excel Format & Quick Actions
+                  Excel Format & Candidate Actions
                 </h3>
                 <p style={{ fontSize: '0.82rem', color: 'var(--neutral-600)', marginBottom: '1rem' }}>
-                  Need the exact Excel format? Download the official Carmel Polytechnic candidate roster template pre-configured with the required columns.
+                  Download the official roster template or export the current candidate list. If an application number is already in the sheet, it will be retained.
                 </p>
 
                 <div style={{
@@ -307,29 +314,54 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                   fontSize: '0.8rem',
                   marginBottom: '1rem'
                 }}>
-                  <strong>Required Columns:</strong>
+                  <strong>Roster Columns & Numbering:</strong>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
                     <span className="badge badge-blue">Application Number (Optional)</span>
                     <span className="badge badge-blue">Candidate Name</span>
                     <span className="badge badge-blue">Phone Number</span>
                   </div>
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.74rem', color: 'var(--neutral-600)' }}>
+                    Auto-numbering prefix: <strong style={{ color: 'var(--primary-700)' }}>{prefix}</strong> (Preview: {prefix} - 1)
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <button
-                  onClick={downloadCandidateTemplate}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    downloadCandidateTemplate(prefix);
+                  }}
                   className="btn btn-outline"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minWidth: '160px' }}
                 >
-                  <Download size={16} />
-                  <span>Download Sample Template</span>
+                  <Download size={15} />
+                  <span>Sample Template</span>
                 </button>
 
                 <button
-                  onClick={() => setShowAddCandidateModal(true)}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    exportCandidateRosterExcel(candidates, prefix);
+                  }}
+                  className="btn btn-outline"
+                  style={{ flex: 1, minWidth: '160px', color: 'var(--primary-700)', borderColor: 'var(--primary-400)' }}
+                  title="Export full candidate roster to Excel file"
+                >
+                  <FileSpreadsheet size={15} />
+                  <span>Export Candidates (.xlsx)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowAddCandidateModal(true);
+                  }}
                   className="btn btn-primary"
-                  style={{ flex: 1 }}
+                  style={{ width: '100%' }}
                 >
                   <UserPlus size={16} />
                   <span>Add Candidate Manually</span>
@@ -344,8 +376,10 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
               <h4 style={{ fontWeight: 700, fontSize: '0.95rem' }}>Registered Candidates Roster ({candidates.length})</h4>
               {candidates.length > 0 && (
                 <button
-                  onClick={() => {
-                    if (confirm('Are you sure you want to clear all candidates?')) {
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (confirm('Are you sure you want to clear all candidates from the roster?')) {
                       onUpdateCandidates([]);
                     }
                   }}
@@ -374,7 +408,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                     <tr key={c.id}>
                       <td style={{ fontWeight: 600, color: 'var(--neutral-500)' }}>{idx + 1}</td>
                       <td style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.85rem' }}>
-                        {c.applicationNumber || getCandidateAppNo(c, idx)}
+                        {c.applicationNumber || getCandidateAppNo(c, idx, prefix)}
                       </td>
                       <td style={{ fontWeight: 600, color: 'var(--neutral-900)' }}>{c.name}</td>
                       <td style={{ fontFamily: 'monospace' }}>{c.phone}</td>
@@ -385,7 +419,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <button
-                          onClick={() => handleDeleteCandidate(c.id)}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleDeleteCandidate(c.id);
+                          }}
                           className="btn btn-danger btn-sm"
                           title="Remove from roster"
                         >
@@ -411,7 +449,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                 Import Questions from Excel
               </h3>
               <p style={{ fontSize: '0.82rem', color: 'var(--neutral-600)', marginBottom: '1rem' }}>
-                Batch import 4-option MCQ questions from an Excel spreadsheet. Questions will be automatically juggled/shuffled for each examinee.
+                Batch import 4-option MCQ questions from an Excel spreadsheet. Questions will be automatically synced to Supabase and juggled/shuffled for each examinee.
               </p>
 
               <div
@@ -476,7 +514,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button
-                  onClick={downloadQuestionTemplate}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    downloadQuestionTemplate();
+                  }}
                   className="btn btn-outline"
                   style={{ flex: 1 }}
                 >
@@ -485,7 +527,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setShowAddQuestionModal(true)}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowAddQuestionModal(true);
+                  }}
                   className="btn btn-gold"
                   style={{ flex: 1 }}
                 >
@@ -502,7 +548,9 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
               <h4 style={{ fontWeight: 700, fontSize: '0.95rem' }}>Active Question Bank ({questions.length})</h4>
               {questions.length > 0 && (
                 <button
-                  onClick={() => {
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
                     if (confirm('Are you sure you want to clear all questions in the bank?')) {
                       onUpdateQuestions([]);
                     }
@@ -534,7 +582,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span className="badge badge-blue">{q.marks} Mark{q.marks > 1 ? 's' : ''}</span>
                       <button
-                        onClick={() => handleDeleteQuestion(q.id)}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDeleteQuestion(q.id);
+                        }}
                         className="btn btn-danger btn-sm"
                         title="Delete Question"
                       >
@@ -590,7 +642,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
           <div className="modal-card">
             <div className="modal-header">
               <h3>Add Candidate Manually</h3>
-              <button onClick={() => setShowAddCandidateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <button
+                type="button"
+                onClick={() => setShowAddCandidateModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              >
                 <XCircle size={20} color="var(--neutral-400)" />
               </button>
             </div>
@@ -600,11 +656,14 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                   <label>Application Number (Optional)</label>
                   <input
                     type="text"
-                    placeholder="e.g. CARMEL-2026-006 (Auto-generated if blank)"
+                    placeholder={`e.g. ${prefix} - ${candidates.length + 1} (Auto-numbered if blank)`}
                     value={newCand.applicationNumber}
                     onChange={(e) => setNewCand({ ...newCand, applicationNumber: e.target.value })}
                     style={{ padding: '0.65rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--neutral-300)' }}
                   />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--neutral-500)' }}>
+                    If left blank, automatically numbered as <strong>{prefix} - {candidates.length + 1}</strong>
+                  </span>
                 </div>
                 <div className="form-group">
                   <label>Full Name</label>
@@ -630,7 +689,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" onClick={() => setShowAddCandidateModal(false)} className="btn btn-outline">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCandidateModal(false)}
+                  className="btn btn-outline"
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
@@ -648,7 +711,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
           <div className="modal-card" style={{ maxWidth: '640px' }}>
             <div className="modal-header">
               <h3>Create MCQ Question</h3>
-              <button onClick={() => setShowAddQuestionModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <button
+                type="button"
+                onClick={() => setShowAddQuestionModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              >
                 <XCircle size={20} color="var(--neutral-400)" />
               </button>
             </div>
@@ -740,7 +807,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" onClick={() => setShowAddQuestionModal(false)} className="btn btn-outline">
+                <button
+                  type="button"
+                  onClick={() => setShowAddQuestionModal(false)}
+                  className="btn btn-outline"
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-gold">

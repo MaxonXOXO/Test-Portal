@@ -19,6 +19,8 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
   const [matchedCandidate, setMatchedCandidate] = useState<Candidate | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
+
   // Live auto-lookup as phone number is entered
   useEffect(() => {
     const cleanPhone = normalizePhone(phoneNumber);
@@ -82,8 +84,13 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
       return;
     }
 
-    if (!examConfig.isExamLive) {
-      setErrorMessage('Examination is currently not active or paused by the administrator.');
+    if (examConfig.examStatus === 'STOPPED') {
+      setErrorMessage('Examination Concluded: The exam has been stopped by the administrator.');
+      return;
+    }
+
+    if (examConfig.examStatus === 'PAUSED' || !examConfig.isExamLive) {
+      setErrorMessage('Examination Paused: The exam is currently paused by the administrator. Please wait.');
       return;
     }
 
@@ -144,7 +151,7 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
                 <div className="cand-preview-item">
                   <span className="label">Application No</span>
                   <span className="val" style={{ fontFamily: 'monospace' }}>
-                    {matchedCandidate.applicationNumber || getCandidateAppNo(matchedCandidate)}
+                    {matchedCandidate.applicationNumber || getCandidateAppNo(matchedCandidate, undefined, prefix)}
                   </span>
                 </div>
                 <div className="cand-preview-item">

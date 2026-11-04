@@ -44,7 +44,7 @@ export function printCandidateAnswerSheet(
   const examStartTime = candidate.startedAt ? new Date(candidate.startedAt).toLocaleString() : 'Not Started';
   const examEndTime = completedTimestamp ? new Date(completedTimestamp).toLocaleString() : 'In Progress';
   const currentDateStr = new Date().toLocaleString();
-  const appNo = candidate.applicationNumber || getCandidateAppNo(candidate);
+  const appNo = candidate.applicationNumber || getCandidateAppNo(candidate, undefined, config.applicationNumberPrefix);
 
   // Build question rows
   const questionRowsHtml = questions
@@ -518,7 +518,7 @@ export function printMasterCandidateList(
       const durationSecs = c.timeTakenSeconds || 0;
       const durFormatted = durationSecs > 0 ? `${Math.floor(durationSecs / 60)}m ${durationSecs % 60}s` : '—';
       const percentage = totalMarks > 0 ? ((c.score / totalMarks) * 100).toFixed(1) : '0';
-      const appNo = c.applicationNumber || getCandidateAppNo(c, index);
+      const appNo = c.applicationNumber || getCandidateAppNo(c, index, config.applicationNumberPrefix);
 
       const startTimeStr = c.startedAt
         ? new Date(c.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -860,7 +860,11 @@ function escapeHtml(str: string | number | null | undefined): string {
 }
 
 // Open HTML in new tab and handle printing
+let isOpeningPrint = false;
 function openAndPrintTab(html: string, title: string): void {
+  if (isOpeningPrint) return;
+  isOpeningPrint = true;
+  setTimeout(() => { isOpeningPrint = false; }, 800);
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     alert('Pop-up was blocked. Please allow pop-ups for this portal to view and print documents.');

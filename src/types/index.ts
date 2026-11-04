@@ -1,5 +1,7 @@
 export type CandidateStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'REVOKED';
 
+export type ExamStatus = 'RUNNING' | 'PAUSED' | 'STOPPED';
+
 export interface Candidate {
   id: string;
   applicationNumber?: string;
@@ -34,10 +36,12 @@ export interface ExamConfig {
   commonPassword: string;
   durationMinutes: number;
   isExamLive: boolean;
+  examStatus: ExamStatus; // 'RUNNING' | 'PAUSED' | 'STOPPED'
   globalRestartTimestamp: number | null;
   randomizeQuestions: boolean;
   autoSubmitOnTimeUp: boolean;
   adminPin: string;
+  applicationNumberPrefix: string; // e.g. "CARMEL"
 }
 
 export interface AppState {
@@ -53,4 +57,6 @@ export type SyncMessage =
   | { type: 'REINSTATE_CANDIDATE'; candidateId: string }
   | { type: 'GLOBAL_RESTART'; timestamp: number }
   | { type: 'CANDIDATE_PROGRESS'; candidateId: string; answers: Record<string, string>; currentQuestionIndex: number }
-  | { type: 'CANDIDATE_SUBMIT'; candidateId: string; completedAt: number; timeTakenSeconds: number; score: number };
+  | { type: 'CANDIDATE_SUBMIT'; candidateId: string; completedAt: number; timeTakenSeconds: number; score: number }
+  | { type: 'EXAM_STATUS_CHANGE'; status: ExamStatus }
+  | { type: 'DATABASE_CLEARED' };

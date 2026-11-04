@@ -18,6 +18,8 @@ export const CandidateInstructions: React.FC<CandidateInstructionsProps> = ({
   onStartExam,
   onBackToLogin,
 }) => {
+  const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
+
   return (
     <div className="onboarding-wrapper" style={{ maxWidth: '640px', width: '100%', margin: '1rem auto' }}>
       <div className="login-card">
@@ -43,7 +45,7 @@ export const CandidateInstructions: React.FC<CandidateInstructionsProps> = ({
               <div className="cand-preview-item">
                 <span className="label">Application No</span>
                 <span className="val" style={{ fontFamily: 'monospace' }}>
-                  {candidate.applicationNumber || getCandidateAppNo(candidate)}
+                  {candidate.applicationNumber || getCandidateAppNo(candidate, undefined, prefix)}
                 </span>
               </div>
               <div className="cand-preview-item">

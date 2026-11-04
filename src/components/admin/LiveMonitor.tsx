@@ -14,7 +14,7 @@ import {
   Unlock,
   Printer,
 } from 'lucide-react';
-import type { Candidate, ExamConfig, Question } from '../../types';
+import type { Candidate, ExamConfig, Question, ExamStatus } from '../../types';
 import { exportResultsExcel, getCandidateAppNo, checkAndAutoCompleteCandidates } from '../../services/storage';
 import { printCandidateAnswerSheet, printMasterCandidateList } from '../../services/printService';
 
@@ -26,6 +26,7 @@ interface LiveMonitorProps {
   onRevokeCandidate: (candidateId: string) => void;
   onReinstateCandidate: (candidateId: string) => void;
   onGlobalRestart: () => void;
+  onStatusChange?: (status: ExamStatus) => void;
 }
 
 export const LiveMonitor: React.FC<LiveMonitorProps> = ({
@@ -41,7 +42,9 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [inspectCandidate, setInspectCandidate] = useState<Candidate | null>(null);
   const [showGlobalRestartModal, setShowGlobalRestartModal] = useState(false);
+  const [globalRestartSuccessMsg, setGlobalRestartSuccessMsg] = useState<string | null>(null);
 
+  const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
   const totalPossibleScore = questions.reduce((acc, q) => acc + q.marks, 0);
 
   // Auto-complete candidates whose exam time has expired
@@ -60,7 +63,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
 
   // Filtered list
   const filteredCandidates = resolvedCandidates.filter((c) => {
-    const appNo = c.applicationNumber || getCandidateAppNo(c);
+    const appNo = c.applicationNumber || getCandidateAppNo(c, undefined, prefix);
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.phone.includes(searchTerm) ||
@@ -70,8 +73,16 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
     return matchesSearch && matchesStatus;
   });
 
-  const handleExportExcel = () => {
+  const handleExportExcel = (e: React.MouseEvent) => {
+    e.preventDefault();
     exportResultsExcel(candidates, questions, examConfig);
+  };
+
+  const handleExecuteGlobalRestart = () => {
+    setShowGlobalRestartModal(false);
+    onGlobalRestart();
+    setGlobalRestartSuccessMsg(`Global exam timer successfully restarted at ${new Date().toLocaleTimeString()}!`);
+    setTimeout(() => setGlobalRestartSuccessMsg(null), 5000);
   };
 
   return (
@@ -131,6 +142,13 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
         </div>
       </div>
 
+      {globalRestartSuccessMsg && (
+        <div className="alert-box" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', marginBottom: '1.25rem' }}>
+          <CheckCircle2 size={18} />
+          <span>{globalRestartSuccessMsg}</span>
+        </div>
+      )}
+
       {/* Main Table Card */}
       <div className="table-card">
         {/* Table Toolbar */}
@@ -141,7 +159,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
               <Search className="input-icon" size={17} />
               <input
                 type="text"
-                placeholder="Search candidate by name or phone number..."
+                placeholder="Search candidate by name, phone, or application number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{ padding: '0.6rem 0.85rem 0.6rem 2.4rem', fontSize: '0.86rem' }}
@@ -153,6 +171,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
               {(['ALL', 'IN_PROGRESS', 'COMPLETED', 'NOT_STARTED', 'REVOKED'] as const).map((st) => (
                 <button
                   key={st}
+                  type="button"
                   onClick={() => setStatusFilter(st)}
                   className={`btn btn-sm ${statusFilter === st ? 'btn-primary' : 'btn-outline'}`}
                   style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
@@ -166,6 +185,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <button
+              type="button"
               onClick={() => setShowGlobalRestartModal(true)}
               className="btn btn-outline btn-sm"
               style={{ color: 'var(--accent-600)', borderColor: 'var(--accent-400)' }}
@@ -176,7 +196,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
             </button>
 
             <button
-              onClick={() => printMasterCandidateList(candidates, questions, examConfig)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                printMasterCandidateList(candidates, questions, examConfig);
+              }}
               className="btn btn-outline btn-sm"
               style={{ color: 'var(--primary-700)', borderColor: 'var(--primary-500)', whiteSpace: 'nowrap' }}
               title="Print master roster score sheet with all candidates in a clean new tab"
@@ -186,9 +210,10 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={handleExportExcel}
               className="btn btn-gold btn-sm"
-              title="Download results in Excel format"
+              title="Download results in Excel format without extra tabs"
             >
               <FileSpreadsheet size={16} />
               <span>Export Results (.xlsx)</span>
@@ -214,11 +239,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
             </thead>
             <tbody>
               {filteredCandidates.length > 0 ? (
-                filteredCandidates.map((c) => {
+                filteredCandidates.map((c, idx) => {
                   const answered = Object.keys(c.answers || {}).length;
                   const total = questions.length;
                   const percentage = totalPossibleScore > 0 ? ((c.score / totalPossibleScore) * 100).toFixed(0) : '0';
-                  const appNo = c.applicationNumber || getCandidateAppNo(c);
+                  const appNo = c.applicationNumber || getCandidateAppNo(c, idx, prefix);
 
                   let statusBadgeClass = 'badge-gray';
                   if (c.status === 'IN_PROGRESS') statusBadgeClass = 'badge-amber';
@@ -307,7 +332,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'nowrap' }}>
                           <button
-                            onClick={() => setInspectCandidate(c)}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setInspectCandidate(c);
+                            }}
                             className="btn btn-outline btn-row-action"
                             title="Inspect Candidate Answers"
                           >
@@ -317,7 +346,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
 
                           {/* Print Individual Answer Sheet (Admin Only) */}
                           <button
-                            onClick={() => printCandidateAnswerSheet(c, questions, examConfig)}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              printCandidateAnswerSheet(c, questions, examConfig);
+                            }}
                             className="btn btn-outline btn-row-action"
                             style={{ color: 'var(--primary-700)', borderColor: 'var(--primary-400)' }}
                             title="Print Individual Answer Sheet in New Tab"
@@ -328,7 +361,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
 
                           {/* Individual Restart (Starts timer from that exact moment) */}
                           <button
-                            onClick={() => onRestartCandidate(c.id)}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              onRestartCandidate(c.id);
+                            }}
                             className="btn btn-outline btn-row-action"
                             style={{ color: 'var(--accent-600)', borderColor: 'var(--accent-300)' }}
                             title="Restart test for this candidate (resets timer from this exact moment)"
@@ -340,7 +377,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
                           {/* Revoke or Reinstate */}
                           {c.status === 'REVOKED' ? (
                             <button
-                              onClick={() => onReinstateCandidate(c.id)}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                onReinstateCandidate(c.id);
+                              }}
                               className="btn btn-outline btn-row-action"
                               style={{ color: 'var(--success-600)', borderColor: 'var(--success-200)' }}
                               title="Reinstate examinee access"
@@ -350,7 +391,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
                             </button>
                           ) : (
                             <button
-                              onClick={() => onRevokeCandidate(c.id)}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                onRevokeCandidate(c.id);
+                              }}
                               className="btn btn-danger btn-row-action"
                               title="Revoke examinee access"
                             >
@@ -383,10 +428,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
               <div>
                 <h3>Candidate Response Log</h3>
                 <p style={{ fontSize: '0.8rem', color: 'var(--neutral-500)' }}>
-                  {inspectCandidate.name} &bull; App No: {inspectCandidate.applicationNumber || getCandidateAppNo(inspectCandidate)} &bull; Contact: {inspectCandidate.phone}
+                  {inspectCandidate.name} &bull; App No: {inspectCandidate.applicationNumber || getCandidateAppNo(inspectCandidate, undefined, prefix)} &bull; Contact: {inspectCandidate.phone}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setInspectCandidate(null)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer' }}
               >
@@ -457,6 +503,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
             </div>
             <div className="modal-footer">
               <button
+                type="button"
                 onClick={() => setInspectCandidate(null)}
                 className="btn btn-outline"
               >
@@ -474,6 +521,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
             <div className="modal-header">
               <h3>Initiate Global Restart</h3>
               <button
+                type="button"
                 onClick={() => setShowGlobalRestartModal(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer' }}
               >
@@ -500,7 +548,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
                     Restart Exam Timer for All Active Test-Takers?
                   </h4>
                   <p style={{ fontSize: '0.85rem', color: 'var(--neutral-600)', marginTop: '0.25rem', lineHeight: 1.5 }}>
-                    This will immediately broadcast a global restart signal. The timer for all active test-takers will
+                    This will immediately broadcast a global restart signal and sync with Supabase. The timer for all active test-takers will
                     restart fresh from this exact moment ({new Date().toLocaleTimeString()}).
                   </p>
                 </div>
@@ -518,16 +566,15 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
             </div>
             <div className="modal-footer">
               <button
+                type="button"
                 onClick={() => setShowGlobalRestartModal(false)}
                 className="btn btn-outline"
               >
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  setShowGlobalRestartModal(false);
-                  onGlobalRestart();
-                }}
+                type="button"
+                onClick={handleExecuteGlobalRestart}
                 className="btn btn-gold"
               >
                 Confirm Global Restart

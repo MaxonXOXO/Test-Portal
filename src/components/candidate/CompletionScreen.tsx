@@ -16,7 +16,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
   totalQuestions,
   onLogout,
 }) => {
-
+  const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
   const attemptedCount = Object.keys(candidate.answers || {}).length;
   const submissionTime = candidate.completedAt
     ? new Date(candidate.completedAt).toLocaleString()
@@ -60,7 +60,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
           <div className="receipt-row">
             <span className="receipt-label">Application Number</span>
             <span className="receipt-val" style={{ fontFamily: 'monospace' }}>
-              {candidate.applicationNumber || getCandidateAppNo(candidate)}
+              {candidate.applicationNumber || getCandidateAppNo(candidate, undefined, prefix)}
             </span>
           </div>
 

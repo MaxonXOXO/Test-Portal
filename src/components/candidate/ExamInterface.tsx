@@ -116,6 +116,13 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
 
   // Real-time Timer Countdown with immediate check and auto-submit
   useEffect(() => {
+    if (examConfig.examStatus === 'STOPPED') {
+      triggerAutoSubmit();
+      return;
+    }
+    if (examConfig.examStatus === 'PAUSED') {
+      return;
+    }
     const checkTimer = () => {
       const elapsed = Math.floor((Date.now() - effectiveStartTime) / 1000);
       const remaining = Math.max(0, totalDurationSeconds - elapsed);
@@ -131,7 +138,7 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
 
     const interval = setInterval(checkTimer, 1000);
     return () => clearInterval(interval);
-  }, [effectiveStartTime, totalDurationSeconds, triggerAutoSubmit]);
+  }, [effectiveStartTime, totalDurationSeconds, triggerAutoSubmit, examConfig.examStatus]);
 
   // Listen for broadcast events from Admin (Restart, Revoke, Global Restart)
   useEffect(() => {
@@ -340,10 +347,25 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
 
   const answeredCount = Object.keys(answers).length;
   const isWarningTime = remainingSeconds <= 300; // Under 5 minutes
-  const appNo = candidate.applicationNumber || getCandidateAppNo(candidate);
+  const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
+  const appNo = candidate.applicationNumber || getCandidateAppNo(candidate, undefined, prefix);
 
   return (
     <div className="exam-container">
+      {/* Paused Overlay */}
+      {examConfig.examStatus === 'PAUSED' && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-card" style={{ textAlign: 'center', padding: '2.5rem 2rem' }}>
+            <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+              <Clock size={32} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--neutral-900)' }}>Examination Currently Paused</h3>
+            <p style={{ color: 'var(--neutral-600)', marginTop: '0.5rem', fontSize: '0.88rem' }}>
+              The exam administrator has temporarily paused the examination. Your timer and selected responses are securely preserved. Testing will resume once the administrator resumes.
+            </p>
+          </div>
+        </div>
+      )}
       {/* Admin Broadcast Flash Alert */}
       {adminNotification && (
         <div
