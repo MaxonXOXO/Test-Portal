@@ -101,7 +101,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
           <strong>Important Instructions:</strong>
           <ul style={{ paddingLeft: '1.2rem', marginTop: '0.35rem' }}>
             <li>In accordance with institutional guidelines, scores are not disclosed directly to attendees.</li>
-            <li>Results will be compiled and published by the examination authority of Carmel Polytechnic College.</li>
+            <li>Results will be compiled and published by the examination authority of {examConfig.instituteName}.</li>
             <li>You may now sign the attendance register and exit the examination hall with the invigilator’s permission.</li>
           </ul>
         </div>

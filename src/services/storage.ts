@@ -411,8 +411,10 @@ export function exportResultsExcel(candidates: Candidate[], questions: Question[
 
   const worksheet = XLSX.utils.json_to_sheet(exportData);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Exam Results');
-  const filename = `Carmel_Polytechnic_Results_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const safeSheetName = (config.title || 'Exam Results').slice(0, 31);
+  XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
+  const safeInstName = (config.instituteName || 'Exam').replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `${safeInstName}_Results_${new Date().toISOString().slice(0, 10)}.xlsx`;
   downloadExcelWorkbook(workbook, filename);
 }
 

@@ -6,6 +6,8 @@ interface HeaderProps {
   onSwitchView: (view: 'candidate' | 'admin') => void;
   candidateName?: string;
   onCandidateLogout?: () => void;
+  instituteName?: string;
+  instituteSubtitle?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -13,15 +15,17 @@ export const Header: React.FC<HeaderProps> = ({
   onSwitchView,
   candidateName,
   onCandidateLogout,
+  instituteName = 'CARMEL POLYTECHNIC COLLEGE PUNNAPRA',
+  instituteSubtitle = 'Govt. Aided Technical Institution | Punnapra, Alappuzha - 688004',
 }) => {
   return (
     <header className="inst-header">
       <div className="inst-header-inner">
         <div className="inst-brand">
-          <img src="/carmel.png" alt="Carmel Polytechnic Logo" className="inst-logo-img" />
+          <img src="/carmel.png" alt="Institutional Logo" className="inst-logo-img" />
           <div className="inst-title-block">
-            <h1>CARMEL POLYTECHNIC COLLEGE PUNNAPRA</h1>
-            <p>Govt. Aided Technical Institution | Punnapra, Alappuzha - 688004</p>
+            <h1>{instituteName}</h1>
+            <p>{instituteSubtitle}</p>
           </div>
         </div>
 

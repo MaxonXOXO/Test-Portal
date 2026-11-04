@@ -25,7 +25,7 @@ export const CandidateInstructions: React.FC<CandidateInstructionsProps> = ({
       <div className="login-card">
         <div className="login-header-banner" style={{ padding: '1.25rem 1.5rem' }}>
           <h2>Examination Instructions</h2>
-          <p>{examConfig.title}</p>
+          <p>{examConfig.title} &bull; {examConfig.instituteName}</p>
         </div>
 
         <div style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>

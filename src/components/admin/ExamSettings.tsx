@@ -152,6 +152,17 @@ export const ExamSettings: React.FC<ExamSettingsProps> = ({
           </div>
 
           <div className="form-group">
+            <label>Institution Subtitle / Address Tag</label>
+            <input
+              type="text"
+              value={form.instituteSubtitle}
+              onChange={(e) => setForm({ ...form, instituteSubtitle: e.target.value })}
+              style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--neutral-300)' }}
+              placeholder="e.g. Govt. Aided Technical Institution | Punnapra, Alappuzha - 688004"
+            />
+          </div>
+
+          <div className="form-group">
             <label>Assessment Name</label>
             <input
               type="text"

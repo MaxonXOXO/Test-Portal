@@ -54,6 +54,13 @@ export const App: React.FC = () => {
     saveAppState(appState);
   }, [appState]);
 
+  // Dynamically update document title based on exam configuration
+  useEffect(() => {
+    if (examConfig.title || examConfig.instituteName) {
+      document.title = `${examConfig.instituteName} | ${examConfig.title}`;
+    }
+  }, [examConfig.title, examConfig.instituteName]);
+
   // Initial remote fetch from Supabase to sync across devices & networks
   useEffect(() => {
     let isMounted = true;
@@ -612,6 +619,8 @@ export const App: React.FC = () => {
         onSwitchView={handleSwitchView}
         candidateName={activeCandidate?.name}
         onCandidateLogout={handleCandidateLogout}
+        instituteName={examConfig.instituteName}
+        instituteSubtitle={examConfig.instituteSubtitle}
       />
 
       {/* Main Content Area */}
