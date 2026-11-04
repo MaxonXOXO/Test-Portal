@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Candidate, Question, ExamConfig, AppState, ExamStatus } from '../types';
-import { DEFAULT_EXAM_CONFIG, INITIAL_CANDIDATES, INITIAL_QUESTIONS } from './storage';
+import { DEFAULT_EXAM_CONFIG } from './storage';
 
 const LOCAL_STORAGE_URL_KEY = 'carmel_supabase_url';
 const LOCAL_STORAGE_KEY_KEY = 'carmel_supabase_anon_key';
@@ -211,12 +211,11 @@ export async function fetchAppStateFromSupabase(): Promise<AppState | null> {
     if (configRows) {
       examConfig = fromDbConfig(configRows);
     } else {
-      // Seed default config into Supabase
       examConfig = { ...DEFAULT_EXAM_CONFIG };
       await client.from('exam_config').upsert(toDbConfig(examConfig));
     }
 
-    // 2. Fetch questions
+    // 2. Fetch questions - NEVER force-reseed if 0 rows exist
     const { data: qRows, error: qErr } = await client
       .from('questions')
       .select('*')
@@ -227,17 +226,9 @@ export async function fetchAppStateFromSupabase(): Promise<AppState | null> {
       return null;
     }
 
-    let questions: Question[];
-    if (qRows && qRows.length > 0) {
-      questions = qRows.map(fromDbQuestion);
-    } else {
-      // Seed default questions if empty
-      questions = INITIAL_QUESTIONS;
-      const dbQs = questions.map(toDbQuestion);
-      await client.from('questions').upsert(dbQs);
-    }
+    const questions: Question[] = (qRows || []).map(fromDbQuestion);
 
-    // 3. Fetch candidates
+    // 3. Fetch candidates - NEVER force-reseed if 0 rows exist
     const { data: cRows, error: cErr } = await client
       .from('candidates')
       .select('*')
@@ -248,15 +239,7 @@ export async function fetchAppStateFromSupabase(): Promise<AppState | null> {
       return null;
     }
 
-    let candidates: Candidate[];
-    if (cRows && cRows.length > 0) {
-      candidates = cRows.map(fromDbCandidate);
-    } else {
-      // Seed initial candidates if empty
-      candidates = INITIAL_CANDIDATES;
-      const dbCands = candidates.map(toDbCandidate);
-      await client.from('candidates').upsert(dbCands);
-    }
+    const candidates: Candidate[] = (cRows || []).map(fromDbCandidate);
 
     return {
       examConfig,
@@ -287,20 +270,38 @@ export async function syncExamConfigToSupabase(config: ExamConfig): Promise<bool
   }
 }
 
+// Delete a single question from Supabase
+export async function deleteQuestionFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client.from('questions').delete().eq('id', id);
+    if (error) {
+      console.error('Failed to delete question from Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Error deleting question from Supabase:', err);
+    return false;
+  }
+}
+
 // Sync entire Questions bank to Supabase
 export async function syncQuestionsToSupabase(questions: Question[]): Promise<boolean> {
   const client = getSupabaseClient();
   if (!client) return false;
 
   try {
-    // Delete removed questions and upsert current
     if (questions.length === 0) {
-      await client.from('questions').delete().neq('id', '___non_existent___');
+      await client.from('questions').delete().neq('id', '___empty___');
       return true;
     }
 
     const ids = questions.map((q) => q.id);
-    await client.from('questions').delete().not('id', 'in', `(${ids.map((id) => `"${id}"`).join(',')})`);
+    const idList = `(${ids.map((id) => id.replace(/"/g, '')).join(',')})`;
+    await client.from('questions').delete().not('id', 'in', idList);
 
     const dbRows = questions.map(toDbQuestion);
     const { error } = await client.from('questions').upsert(dbRows);
@@ -315,6 +316,24 @@ export async function syncQuestionsToSupabase(questions: Question[]): Promise<bo
   }
 }
 
+// Delete a single candidate from Supabase
+export async function deleteCandidateFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client.from('candidates').delete().eq('id', id);
+    if (error) {
+      console.error('Failed to delete candidate from Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Error deleting candidate from Supabase:', err);
+    return false;
+  }
+}
+
 // Sync Candidates to Supabase
 export async function syncCandidatesToSupabase(candidates: Candidate[]): Promise<boolean> {
   const client = getSupabaseClient();
@@ -322,12 +341,13 @@ export async function syncCandidatesToSupabase(candidates: Candidate[]): Promise
 
   try {
     if (candidates.length === 0) {
-      await client.from('candidates').delete().neq('id', '___non_existent___');
+      await client.from('candidates').delete().neq('id', '___empty___');
       return true;
     }
 
     const ids = candidates.map((c) => c.id);
-    await client.from('candidates').delete().not('id', 'in', `(${ids.map((id) => `"${id}"`).join(',')})`);
+    const idList = `(${ids.map((id) => id.replace(/"/g, '')).join(',')})`;
+    await client.from('candidates').delete().not('id', 'in', idList);
 
     const dbRows = candidates.map(toDbCandidate);
     const { error } = await client.from('candidates').upsert(dbRows);
@@ -429,11 +449,11 @@ export async function clearEntireSupabaseDatabase(): Promise<boolean> {
 
   try {
     // 1. Delete all candidates
-    const { error: cErr } = await client.from('candidates').delete().neq('id', '___all___');
+    const { error: cErr } = await client.from('candidates').delete().neq('id', '___empty___');
     if (cErr) console.warn('Error clearing candidates from Supabase:', cErr.message);
 
     // 2. Delete all questions
-    const { error: qErr } = await client.from('questions').delete().neq('id', '___all___');
+    const { error: qErr } = await client.from('questions').delete().neq('id', '___empty___');
     if (qErr) console.warn('Error clearing questions from Supabase:', qErr.message);
 
     // 3. Reset exam config to pristine default
@@ -515,4 +535,3 @@ export function subscribeToSupabaseRealtime(callbacks: {
     client.removeChannel(channel);
   };
 }
-

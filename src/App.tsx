@@ -20,6 +20,8 @@ import {
   submitCandidateInSupabase,
   clearEntireSupabaseDatabase,
   subscribeToSupabaseRealtime,
+  deleteCandidateFromSupabase,
+  deleteQuestionFromSupabase,
 } from './services/supabase';
 import { Header } from './components/common/Header';
 import { CandidateLogin } from './components/candidate/CandidateLogin';
@@ -403,6 +405,16 @@ export const App: React.FC = () => {
     syncCandidatesToSupabase(newCandidates);
   };
 
+  // Admin Actions: Delete Candidate
+  const handleDeleteCandidate = (candidateId: string) => {
+    const updated = candidates.filter((c) => c.id !== candidateId);
+    setAppState((prev) => ({
+      ...prev,
+      candidates: updated,
+    }));
+    deleteCandidateFromSupabase(candidateId);
+  };
+
   // Admin Actions: Update Questions Bank
   const handleUpdateQuestions = (newQuestions: Question[]) => {
     setAppState((prev) => ({
@@ -410,6 +422,16 @@ export const App: React.FC = () => {
       questions: newQuestions,
     }));
     syncQuestionsToSupabase(newQuestions);
+  };
+
+  // Admin Actions: Delete Question
+  const handleDeleteQuestion = (questionId: string) => {
+    const updated = questions.filter((q) => q.id !== questionId);
+    setAppState((prev) => ({
+      ...prev,
+      questions: updated,
+    }));
+    deleteQuestionFromSupabase(questionId);
   };
 
   // Admin Actions: Update Exam Config
@@ -648,6 +670,8 @@ export const App: React.FC = () => {
             examConfig={examConfig}
             onUpdateCandidates={handleUpdateCandidates}
             onUpdateQuestions={handleUpdateQuestions}
+            onDeleteCandidate={handleDeleteCandidate}
+            onDeleteQuestion={handleDeleteQuestion}
             onUpdateExamConfig={handleUpdateExamConfig}
             onRestartCandidate={handleRestartCandidate}
             onRevokeCandidate={handleRevokeCandidate}

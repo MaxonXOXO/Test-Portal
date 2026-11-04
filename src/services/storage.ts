@@ -16,146 +16,9 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   applicationNumberPrefix: 'CARMEL',
 };
 
-export const INITIAL_QUESTIONS: Question[] = [
-  {
-    id: 'q1',
-    question: 'Which of the following materials has the highest thermal conductivity at room temperature?',
-    options: ['Diamond', 'Silver', 'Copper', 'Aluminium'],
-    correctOption: 'A',
-    marks: 1,
-  },
-  {
-    id: 'q2',
-    question: 'In an electric circuit, Ohm’s law is expressed mathematically as:',
-    options: ['V = I / R', 'V = I × R', 'I = V × R', 'P = V × I'],
-    correctOption: 'B',
-    marks: 1,
-  },
-  {
-    id: 'q3',
-    question: 'Which unit is used to measure the moment of inertia in the SI system?',
-    options: ['kg·m', 'kg·m²', 'N·m', 'kg/m²'],
-    correctOption: 'B',
-    marks: 1,
-  },
-  {
-    id: 'q4',
-    question: 'What is the primary function of a capacitor in a DC filter circuit?',
-    options: ['Amplify signals', 'Block DC and allow AC ripple to pass', 'Store and smooth out voltage ripples', 'Convert DC to AC'],
-    correctOption: 'C',
-    marks: 1,
-  },
-  {
-    id: 'q5',
-    question: 'Which thermodynamic cycle is the standard idealized cycle for modern spark-ignition internal combustion engines?',
-    options: ['Diesel cycle', 'Rankine cycle', 'Otto cycle', 'Brayton cycle'],
-    correctOption: 'C',
-    marks: 1,
-  },
-  {
-    id: 'q6',
-    question: 'In computer programming and networking, what does the abbreviation "IP" stand for?',
-    options: ['Interface Protocol', 'Internet Protocol', 'Internal Packet', 'Integrated Provider'],
-    correctOption: 'B',
-    marks: 1,
-  },
-  {
-    id: 'q7',
-    question: 'What is the bending moment at the free end of a cantilever beam carrying a uniformly distributed load?',
-    options: ['Maximum', 'Zero', 'WL / 2', 'WL² / 2'],
-    correctOption: 'B',
-    marks: 1,
-  },
-  {
-    id: 'q8',
-    question: 'Which semiconductor device acts as a one-way valve for electric current?',
-    options: ['Resistor', 'Inductor', 'Diode', 'Transformer'],
-    correctOption: 'C',
-    marks: 1,
-  },
-  {
-    id: 'q9',
-    question: 'If a car travels 120 km at 60 km/h and returns at 40 km/h, what is the average speed for the entire round trip?',
-    options: ['50 km/h', '48 km/h', '52 km/h', '45 km/h'],
-    correctOption: 'B',
-    marks: 1,
-  },
-  {
-    id: 'q10',
-    question: 'Which instrument is specifically designed to measure fluid flow velocity in an open pipe or channel?',
-    options: ['Pitot tube', 'Manometer', 'Barometer', 'Hygrometer'],
-    correctOption: 'A',
-    marks: 1,
-  },
-];
-
-export const INITIAL_CANDIDATES: Candidate[] = [
-  {
-    id: 'c1',
-    applicationNumber: 'CARMEL - 1',
-    phone: '9876543210',
-    name: 'Abhishek Rajesh',
-    status: 'NOT_STARTED',
-    startedAt: null,
-    completedAt: null,
-    timeTakenSeconds: null,
-    answers: {},
-    score: 0,
-    currentQuestionIndex: 0,
-  },
-  {
-    id: 'c2',
-    applicationNumber: 'CARMEL - 2',
-    phone: '9876543211',
-    name: 'Ananya S. Kumar',
-    status: 'NOT_STARTED',
-    startedAt: null,
-    completedAt: null,
-    timeTakenSeconds: null,
-    answers: {},
-    score: 0,
-    currentQuestionIndex: 0,
-  },
-  {
-    id: 'c3',
-    applicationNumber: 'CARMEL - 3',
-    phone: '9876543212',
-    name: 'Midhun Varghese',
-    status: 'NOT_STARTED',
-    startedAt: null,
-    completedAt: null,
-    timeTakenSeconds: null,
-    answers: {},
-    score: 0,
-    currentQuestionIndex: 0,
-  },
-  {
-    id: 'c4',
-    applicationNumber: 'CARMEL - 4',
-    phone: '9876543213',
-    name: 'Sneha Mariam Roy',
-    status: 'NOT_STARTED',
-    startedAt: null,
-    completedAt: null,
-    timeTakenSeconds: null,
-    answers: {},
-    score: 0,
-    currentQuestionIndex: 0,
-  },
-  {
-    id: 'c5',
-    applicationNumber: 'CARMEL - 5',
-    phone: '9876543214',
-    name: 'Rohit K. Nair',
-    status: 'NOT_STARTED',
-    startedAt: null,
-    completedAt: null,
-    timeTakenSeconds: null,
-    answers: {},
-    score: 0,
-    currentQuestionIndex: 0,
-  },
-];
+// Start completely empty so deleted questions/candidates never resurrect
+export const INITIAL_QUESTIONS: Question[] = [];
+export const INITIAL_CANDIDATES: Candidate[] = [];
 
 const STORAGE_KEY = 'carmel_polytechnic_portal_v1';
 
@@ -193,7 +56,6 @@ export function checkAndAutoCompleteCandidates(
   const prefix = examConfig.applicationNumberPrefix || 'CARMEL';
 
   const updatedCandidates = candidates.map((cand, idx) => {
-    // Ensure applicationNumber is populated
     const appNo = cand.applicationNumber || getCandidateAppNo(cand, idx, prefix);
     const withAppNo: Candidate = cand.applicationNumber ? cand : { ...cand, applicationNumber: appNo };
 
@@ -242,10 +104,10 @@ export function loadAppState(): AppState {
         examConfig.examStatus = examConfig.isExamLive ? 'RUNNING' : 'PAUSED';
       }
 
-      const rawCandidates = parsed.candidates?.length ? parsed.candidates : INITIAL_CANDIDATES;
-      const questions = parsed.questions?.length ? parsed.questions : INITIAL_QUESTIONS;
+      // If candidates or questions was saved as an empty array [], preserve [] without reverting
+      const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];
+      const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
 
-      // Auto-populate application numbers and auto-complete candidates whose time expired
       const { candidates } = checkAndAutoCompleteCandidates(rawCandidates, questions, examConfig);
 
       return {
@@ -258,11 +120,10 @@ export function loadAppState(): AppState {
     console.error('Failed to parse stored portal state:', err);
   }
 
-  const { candidates } = checkAndAutoCompleteCandidates(INITIAL_CANDIDATES, INITIAL_QUESTIONS, DEFAULT_EXAM_CONFIG);
   return {
     examConfig: DEFAULT_EXAM_CONFIG,
-    candidates,
-    questions: INITIAL_QUESTIONS,
+    candidates: [],
+    questions: [],
   };
 }
 

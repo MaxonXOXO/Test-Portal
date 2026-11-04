@@ -28,6 +28,8 @@ interface ExcelManagerProps {
   examConfig: ExamConfig;
   onUpdateCandidates: (candidates: Candidate[]) => void;
   onUpdateQuestions: (questions: Question[]) => void;
+  onDeleteCandidate?: (id: string) => void;
+  onDeleteQuestion?: (id: string) => void;
 }
 
 export const ExcelManager: React.FC<ExcelManagerProps> = ({
@@ -36,6 +38,8 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
   examConfig,
   onUpdateCandidates,
   onUpdateQuestions,
+  onDeleteCandidate,
+  onDeleteQuestion,
 }) => {
   const [activeSection, setActiveSection] = useState<'candidates' | 'questions'>('candidates');
 
@@ -213,14 +217,22 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
   // Delete Candidate
   const handleDeleteCandidate = (id: string) => {
     if (confirm('Are you sure you want to remove this candidate from the roster?')) {
-      onUpdateCandidates(candidates.filter((c) => c.id !== id));
+      if (onDeleteCandidate) {
+        onDeleteCandidate(id);
+      } else {
+        onUpdateCandidates(candidates.filter((c) => c.id !== id));
+      }
     }
   };
 
   // Delete Question
   const handleDeleteQuestion = (id: string) => {
     if (confirm('Are you sure you want to delete this question?')) {
-      onUpdateQuestions(questions.filter((q) => q.id !== id));
+      if (onDeleteQuestion) {
+        onDeleteQuestion(id);
+      } else {
+        onUpdateQuestions(questions.filter((q) => q.id !== id));
+      }
     }
   };
 

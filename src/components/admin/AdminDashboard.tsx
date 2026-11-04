@@ -23,6 +23,8 @@ interface AdminDashboardProps {
   onRestartCandidate: (candidateId: string) => void;
   onRevokeCandidate: (candidateId: string) => void;
   onReinstateCandidate: (candidateId: string) => void;
+  onDeleteCandidate?: (candidateId: string) => void;
+  onDeleteQuestion?: (questionId: string) => void;
   onGlobalRestart: () => void;
   onStatusChange: (status: ExamStatus) => void;
   onClearDatabase: () => Promise<void>;
@@ -39,6 +41,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRestartCandidate,
   onRevokeCandidate,
   onReinstateCandidate,
+  onDeleteCandidate,
+  onDeleteQuestion,
   onGlobalRestart,
   onStatusChange,
   onClearDatabase,
@@ -255,6 +259,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           examConfig={examConfig}
           onUpdateCandidates={onUpdateCandidates}
           onUpdateQuestions={onUpdateQuestions}
+          onDeleteCandidate={onDeleteCandidate}
+          onDeleteQuestion={onDeleteQuestion}
         />
       )}
 
