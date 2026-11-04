@@ -90,6 +90,7 @@ export const INITIAL_QUESTIONS: Question[] = [
 export const INITIAL_CANDIDATES: Candidate[] = [
   {
     id: 'c1',
+    applicationNumber: 'CARMEL-2026-001',
     phone: '9876543210',
     name: 'Abhishek Rajesh',
     status: 'NOT_STARTED',
@@ -102,6 +103,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c2',
+    applicationNumber: 'CARMEL-2026-002',
     phone: '9876543211',
     name: 'Ananya S. Kumar',
     status: 'NOT_STARTED',
@@ -114,6 +116,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c3',
+    applicationNumber: 'CARMEL-2026-003',
     phone: '9876543212',
     name: 'Midhun Varghese',
     status: 'NOT_STARTED',
@@ -126,6 +129,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c4',
+    applicationNumber: 'CARMEL-2026-004',
     phone: '9876543213',
     name: 'Sneha Mariam Roy',
     status: 'NOT_STARTED',
@@ -138,6 +142,7 @@ export const INITIAL_CANDIDATES: Candidate[] = [
   },
   {
     id: 'c5',
+    applicationNumber: 'CARMEL-2026-005',
     phone: '9876543214',
     name: 'Rohit K. Nair',
     status: 'NOT_STARTED',
@@ -152,6 +157,67 @@ export const INITIAL_CANDIDATES: Candidate[] = [
 
 const STORAGE_KEY = 'carmel_polytechnic_portal_v1';
 
+// Candidate Application Number helper
+export function getCandidateAppNo(candidate: Candidate, fallbackIndex?: number): string {
+  if (candidate.applicationNumber && candidate.applicationNumber.trim()) {
+    return candidate.applicationNumber.trim();
+  }
+  if (candidate.rollNo && candidate.rollNo.trim()) {
+    return candidate.rollNo.trim();
+  }
+  if (candidate.id && !candidate.id.startsWith('cand_')) {
+    return `APP-${candidate.id.toUpperCase()}`;
+  }
+  if (candidate.phone) {
+    return `APP-${candidate.phone.slice(-6)}`;
+  }
+  return fallbackIndex !== undefined ? `APP-${String(fallbackIndex + 1).padStart(3, '0')}` : 'N/A';
+}
+
+// Automatically check and complete candidates whose exam time has expired
+export function checkAndAutoCompleteCandidates(
+  candidates: Candidate[],
+  questions: Question[],
+  examConfig: ExamConfig
+): { candidates: Candidate[]; hasChanges: boolean } {
+  let hasChanges = false;
+  const durationMs = examConfig.durationMinutes * 60 * 1000;
+  const now = Date.now();
+
+  const updatedCandidates = candidates.map((cand, idx) => {
+    // Ensure applicationNumber is populated
+    const appNo = cand.applicationNumber || getCandidateAppNo(cand, idx);
+    const withAppNo: Candidate = cand.applicationNumber ? cand : { ...cand, applicationNumber: appNo };
+
+    if (cand.status !== 'IN_PROGRESS') {
+      return withAppNo;
+    }
+
+    const effectiveStart = Math.max(
+      cand.startedAt || 0,
+      cand.restartedAt || 0,
+      examConfig.globalRestartTimestamp || 0
+    );
+
+    if (effectiveStart > 0 && now >= effectiveStart + durationMs) {
+      hasChanges = true;
+      const score = calculateCandidateScore(cand.answers || {}, questions);
+      const totalDurationSeconds = examConfig.durationMinutes * 60;
+      return {
+        ...withAppNo,
+        status: 'COMPLETED' as const,
+        completedAt: cand.completedAt || (effectiveStart + durationMs),
+        timeTakenSeconds: cand.timeTakenSeconds || totalDurationSeconds,
+        score,
+      };
+    }
+
+    return withAppNo;
+  });
+
+  return { candidates: updatedCandidates, hasChanges };
+}
+
 export function loadAppState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -161,19 +227,26 @@ export function loadAppState(): AppState {
       if (examConfig.adminPin === '1234') {
         examConfig.adminPin = 'admin@carmelpoly.in';
       }
+      const rawCandidates = parsed.candidates?.length ? parsed.candidates : INITIAL_CANDIDATES;
+      const questions = parsed.questions?.length ? parsed.questions : INITIAL_QUESTIONS;
+
+      // Auto-populate application numbers and auto-complete candidates whose time expired
+      const { candidates } = checkAndAutoCompleteCandidates(rawCandidates, questions, examConfig);
+
       return {
         examConfig,
-        candidates: parsed.candidates?.length ? parsed.candidates : INITIAL_CANDIDATES,
-        questions: parsed.questions?.length ? parsed.questions : INITIAL_QUESTIONS,
+        candidates,
+        questions,
       };
     }
   } catch (err) {
     console.error('Failed to parse stored portal state:', err);
   }
 
+  const { candidates } = checkAndAutoCompleteCandidates(INITIAL_CANDIDATES, INITIAL_QUESTIONS, DEFAULT_EXAM_CONFIG);
   return {
     examConfig: DEFAULT_EXAM_CONFIG,
-    candidates: INITIAL_CANDIDATES,
+    candidates,
     questions: INITIAL_QUESTIONS,
   };
 }
@@ -212,16 +285,19 @@ export function normalizePhone(phone: string | number): string {
 export function downloadCandidateTemplate(): void {
   const sampleData = [
     {
-      'Phone Number': '9876543210',
+      'Application Number': 'CARMEL-2026-001',
       'Candidate Name': 'Rahul Krishnan',
+      'Phone Number': '9876543210',
     },
     {
-      'Phone Number': '9876543211',
+      'Application Number': 'CARMEL-2026-002',
       'Candidate Name': 'Fathima Noor',
+      'Phone Number': '9876543211',
     },
     {
-      'Phone Number': '9876543212',
+      'Application Number': 'CARMEL-2026-003',
       'Candidate Name': 'Albin Joseph',
+      'Phone Number': '9876543212',
     },
   ];
 
@@ -286,12 +362,26 @@ export async function parseCandidateExcel(file: File): Promise<Candidate[]> {
     const nameRaw =
       row['Candidate Name'] || row['Name'] || row['name'] || Object.values(row)[1];
 
+    const appNoRaw =
+      row['Application Number'] ||
+      row['Application No'] ||
+      row['Application No.'] ||
+      row['Application number'] ||
+      row['application_number'] ||
+      row['App No'] ||
+      row['Roll No'] ||
+      row['Roll Number'] ||
+      row['Reg No'] ||
+      row['Register Number'];
+
     const phone = normalizePhone(phoneRaw);
     const name = String(nameRaw).trim();
+    const applicationNumber = appNoRaw ? String(appNoRaw).trim() : `APP-${phone.slice(-6)}`;
 
     if (phone && name) {
       candidates.push({
         id: `cand_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+        applicationNumber,
         phone,
         name,
         status: 'NOT_STARTED',
@@ -352,10 +442,11 @@ export async function parseQuestionExcel(file: File): Promise<Question[]> {
 }
 
 // Export Results to Excel (For Admin Only)
-export function exportResultsExcel(candidates: Candidate[], questions: Question[], _config: ExamConfig): void {
+export function exportResultsExcel(candidates: Candidate[], questions: Question[], config: ExamConfig): void {
+  const { candidates: resolvedCandidates } = checkAndAutoCompleteCandidates(candidates, questions, config);
   const totalPossibleScore = questions.reduce((sum, q) => sum + q.marks, 0);
 
-  const exportData = candidates.map((cand, index) => {
+  const exportData = resolvedCandidates.map((cand, index) => {
     const answeredCount = Object.keys(cand.answers || {}).length;
     const timeTakenFormatted = cand.timeTakenSeconds
       ? `${Math.floor(cand.timeTakenSeconds / 60)}m ${cand.timeTakenSeconds % 60}s`
@@ -365,6 +456,7 @@ export function exportResultsExcel(candidates: Candidate[], questions: Question[
 
     return {
       'Sl No': index + 1,
+      'Application Number': cand.applicationNumber || getCandidateAppNo(cand, index),
       'Candidate Name': cand.name,
       'Phone Number': cand.phone,
       'Exam Status': cand.status,

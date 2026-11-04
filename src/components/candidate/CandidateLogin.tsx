@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Phone, Lock, AlertCircle, ArrowRight, UserCheck } from 'lucide-react';
 import type { Candidate, ExamConfig } from '../../types';
-import { normalizePhone } from '../../services/storage';
+import { normalizePhone, getCandidateAppNo } from '../../services/storage';
 
 interface CandidateLoginProps {
   candidates: Candidate[];
@@ -70,6 +70,18 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
       return;
     }
 
+    // Check if exam duration has expired
+    const effectiveStart = Math.max(
+      candidate.startedAt || 0,
+      candidate.restartedAt || 0,
+      examConfig.globalRestartTimestamp || 0
+    );
+    const durationMs = examConfig.durationMinutes * 60 * 1000;
+    if (candidate.status === 'IN_PROGRESS' && effectiveStart > 0 && Date.now() >= effectiveStart + durationMs) {
+      setErrorMessage('Examination Period Ended: The allocated exam time has expired and your test has been automatically submitted. Please contact the invigilator.');
+      return;
+    }
+
     if (!examConfig.isExamLive) {
       setErrorMessage('Examination is currently not active or paused by the administrator.');
       return;
@@ -124,10 +136,16 @@ export const CandidateLogin: React.FC<CandidateLoginProps> = ({
                   {matchedCandidate.status.replace('_', ' ')}
                 </span>
               </div>
-              <div className="cand-preview-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <div className="cand-preview-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
                 <div className="cand-preview-item">
                   <span className="label">Candidate Name</span>
                   <span className="val">{matchedCandidate.name}</span>
+                </div>
+                <div className="cand-preview-item">
+                  <span className="label">Application No</span>
+                  <span className="val" style={{ fontFamily: 'monospace' }}>
+                    {matchedCandidate.applicationNumber || getCandidateAppNo(matchedCandidate)}
+                  </span>
                 </div>
                 <div className="cand-preview-item">
                   <span className="label">Registered Contact</span>

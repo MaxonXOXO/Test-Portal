@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Clock,
   ChevronLeft,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import type { Candidate, ExamConfig, Question, SyncMessage } from '../../types';
 import { examBroadcast } from '../../services/broadcast';
-import { calculateCandidateScore } from '../../services/storage';
+import { calculateCandidateScore, getCandidateAppNo } from '../../services/storage';
 
 interface ExamInterfaceProps {
   candidate: Candidate;
@@ -57,6 +57,19 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
   const [showSubmitModal, setShowSubmitModal] = useState<boolean>(false);
   const [adminNotification, setAdminNotification] = useState<string | null>(null);
 
+  // References to eliminate stale closure issues when timer runs out
+  const answersRef = useRef<Record<string, string>>(candidate.answers || {});
+  const candidateRef = useRef<Candidate>(candidate);
+  const hasAutoSubmittedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    candidateRef.current = candidate;
+  }, [candidate]);
+
   // Maintain juggled/shuffled question order for this candidate
   const orderedQuestions = useMemo(() => {
     if (!candidate.shuffledQuestionIds || candidate.shuffledQuestionIds.length === 0) {
@@ -79,44 +92,54 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
 
   const currentQuestion: Question | undefined = orderedQuestions[currentIndex];
 
-  // Real-time Timer Countdown
+  // Auto Submit when timer reaches 0 - guarantees latest answers are saved and turned in
+  const triggerAutoSubmit = useCallback(() => {
+    if (hasAutoSubmittedRef.current) return;
+    hasAutoSubmittedRef.current = true;
+    setShowSubmitModal(false);
+
+    const currentAns = answersRef.current;
+    const currentCand = candidateRef.current;
+    const score = calculateCandidateScore(currentAns, questions);
+
+    const completedCandidate: Candidate = {
+      ...currentCand,
+      status: 'COMPLETED',
+      completedAt: Date.now(),
+      timeTakenSeconds: totalDurationSeconds,
+      answers: currentAns,
+      score,
+    };
+
+    onSubmitExam(completedCandidate);
+  }, [onSubmitExam, questions, totalDurationSeconds]);
+
+  // Real-time Timer Countdown with immediate check and auto-submit
   useEffect(() => {
-    const interval = setInterval(() => {
+    const checkTimer = () => {
       const elapsed = Math.floor((Date.now() - effectiveStartTime) / 1000);
       const remaining = Math.max(0, totalDurationSeconds - elapsed);
       setRemainingSeconds(remaining);
 
       if (remaining <= 0) {
-        clearInterval(interval);
-        handleAutoSubmit();
+        triggerAutoSubmit();
       }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [effectiveStartTime, totalDurationSeconds]);
-
-  // Handle Auto Submit when timer reaches 0
-  const handleAutoSubmit = useCallback(() => {
-    const timeTaken = Math.min(totalDurationSeconds, Math.floor((Date.now() - effectiveStartTime) / 1000));
-    const score = calculateCandidateScore(answers, questions);
-
-    const completedCandidate: Candidate = {
-      ...candidate,
-      status: 'COMPLETED',
-      completedAt: Date.now(),
-      timeTakenSeconds: timeTaken,
-      answers,
-      score,
     };
 
-    onSubmitExam(completedCandidate);
-  }, [answers, candidate, effectiveStartTime, onSubmitExam, questions, totalDurationSeconds]);
+    // Run check immediately on mount or start time change
+    checkTimer();
+
+    const interval = setInterval(checkTimer, 1000);
+    return () => clearInterval(interval);
+  }, [effectiveStartTime, totalDurationSeconds, triggerAutoSubmit]);
 
   // Listen for broadcast events from Admin (Restart, Revoke, Global Restart)
   useEffect(() => {
     const unsubscribe = examBroadcast.subscribe((msg: SyncMessage) => {
       if (msg.type === 'RESTART_CANDIDATE' && msg.candidateId === candidate.id) {
         // Reset state & timer starting from exact moment
+        hasAutoSubmittedRef.current = false;
+        answersRef.current = {};
         setAnswers({});
         setCurrentIndex(0);
         setVisitedIndices(new Set([0]));
@@ -132,15 +155,18 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
           score: 0,
           currentQuestionIndex: 0,
         };
+        candidateRef.current = updated;
         onCandidateUpdate(updated);
       } else if (msg.type === 'REVOKE_CANDIDATE' && msg.candidateId === candidate.id) {
         onRevoked();
       } else if (msg.type === 'GLOBAL_RESTART') {
+        hasAutoSubmittedRef.current = false;
         setAdminNotification(`Global Restart initiated by invigilator at ${new Date(msg.timestamp).toLocaleTimeString()}. Exam timer has restarted.`);
         const updated: Candidate = {
           ...candidate,
           restartedAt: msg.timestamp,
         };
+        candidateRef.current = updated;
         onCandidateUpdate(updated);
       }
     });
@@ -225,6 +251,7 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
   const handleSelectOption = (optionKey: 'A' | 'B' | 'C' | 'D') => {
     if (!currentQuestion) return;
     const newAnswers = { ...answers, [currentQuestion.id]: optionKey };
+    answersRef.current = newAnswers;
     setAnswers(newAnswers);
 
     const updated: Candidate = {
@@ -232,6 +259,7 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
       answers: newAnswers,
       currentQuestionIndex: currentIndex,
     };
+    candidateRef.current = updated;
     onCandidateUpdate(updated);
 
     examBroadcast.broadcast({
@@ -247,6 +275,7 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
     if (!currentQuestion) return;
     const newAnswers = { ...answers };
     delete newAnswers[currentQuestion.id];
+    answersRef.current = newAnswers;
     setAnswers(newAnswers);
 
     const updated: Candidate = {
@@ -254,6 +283,7 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
       answers: newAnswers,
       currentQuestionIndex: currentIndex,
     };
+    candidateRef.current = updated;
     onCandidateUpdate(updated);
 
     examBroadcast.broadcast({
@@ -269,25 +299,32 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
     if (newIdx >= 0 && newIdx < orderedQuestions.length) {
       setCurrentIndex(newIdx);
       setVisitedIndices((prev) => new Set(prev).add(newIdx));
-      onCandidateUpdate({
+      const updated: Candidate = {
         ...candidate,
         currentQuestionIndex: newIdx,
-      });
+      };
+      candidateRef.current = updated;
+      onCandidateUpdate(updated);
     }
   };
 
   // Explicit Candidate Submission
   const handleManualSubmit = () => {
+    if (hasAutoSubmittedRef.current) return;
+    hasAutoSubmittedRef.current = true;
     setShowSubmitModal(false);
-    const timeTaken = Math.floor((Date.now() - effectiveStartTime) / 1000);
-    const score = calculateCandidateScore(answers, questions);
+
+    const timeTaken = Math.min(totalDurationSeconds, Math.floor((Date.now() - effectiveStartTime) / 1000));
+    const currentAns = answersRef.current;
+    const currentCand = candidateRef.current;
+    const score = calculateCandidateScore(currentAns, questions);
 
     const completedCandidate: Candidate = {
-      ...candidate,
+      ...currentCand,
       status: 'COMPLETED',
       completedAt: Date.now(),
       timeTakenSeconds: timeTaken,
-      answers,
+      answers: currentAns,
       score,
     };
 
@@ -303,6 +340,7 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
 
   const answeredCount = Object.keys(answers).length;
   const isWarningTime = remainingSeconds <= 300; // Under 5 minutes
+  const appNo = candidate.applicationNumber || getCandidateAppNo(candidate);
 
   return (
     <div className="exam-container">
@@ -333,7 +371,9 @@ export const ExamInterface: React.FC<ExamInterfaceProps> = ({
           </div>
           <div className="exam-candidate-info">
             <h3>{candidate.name}</h3>
-            <p>Registered Contact: <strong>{candidate.phone}</strong></p>
+            <p>
+              App No: <strong style={{ fontFamily: 'monospace' }}>{appNo}</strong> &bull; Contact: <strong>{candidate.phone}</strong>
+            </p>
           </div>
         </div>
 

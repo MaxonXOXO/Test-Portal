@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, FileCheck, LogOut } from 'lucide-react';
 import type { Candidate, ExamConfig } from '../../types';
+import { getCandidateAppNo } from '../../services/storage';
 
 interface CompletionScreenProps {
   candidate: Candidate;
@@ -54,6 +55,13 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
           <div className="receipt-row">
             <span className="receipt-label">Candidate Name</span>
             <span className="receipt-val">{candidate.name}</span>
+          </div>
+
+          <div className="receipt-row">
+            <span className="receipt-label">Application Number</span>
+            <span className="receipt-val" style={{ fontFamily: 'monospace' }}>
+              {candidate.applicationNumber || getCandidateAppNo(candidate)}
+            </span>
           </div>
 
           <div className="receipt-row">

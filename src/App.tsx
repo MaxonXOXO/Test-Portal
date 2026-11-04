@@ -4,6 +4,8 @@ import {
   loadAppState,
   saveAppState,
   shuffleArray,
+  checkAndAutoCompleteCandidates,
+  calculateCandidateScore,
 } from './services/storage';
 import { examBroadcast } from './services/broadcast';
 import { Header } from './components/common/Header';
@@ -145,10 +147,68 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
+  // Periodic check to auto-complete candidates whose exam time has expired
+  useEffect(() => {
+    const checkExpirations = () => {
+      setAppState((prev) => {
+        const { candidates: updated, hasChanges } = checkAndAutoCompleteCandidates(
+          prev.candidates,
+          prev.questions,
+          prev.examConfig
+        );
+        if (!hasChanges) return prev;
+
+        // If the active candidate expired, broadcast submit and move to COMPLETED screen
+        if (activeCandidateId) {
+          const activeNow = updated.find((c) => c.id === activeCandidateId);
+          if (activeNow && activeNow.status === 'COMPLETED' && candidateStep === 'EXAM') {
+            examBroadcast.broadcast({
+              type: 'CANDIDATE_SUBMIT',
+              candidateId: activeNow.id,
+              completedAt: activeNow.completedAt || Date.now(),
+              timeTakenSeconds: activeNow.timeTakenSeconds || prev.examConfig.durationMinutes * 60,
+              score: activeNow.score,
+            });
+            setCandidateStep('COMPLETED');
+          }
+        }
+
+        return { ...prev, candidates: updated };
+      });
+    };
+
+    checkExpirations();
+    const interval = setInterval(checkExpirations, 2000);
+    return () => clearInterval(interval);
+  }, [activeCandidateId, candidateStep]);
+
   // Candidate login success -> Go to instructions
   const handleCandidateLoginSuccess = (cand: Candidate) => {
     setActiveCandidateId(cand.id);
-    if (cand.status === 'COMPLETED') {
+
+    // Verify if time has expired
+    const effectiveStart = Math.max(
+      cand.startedAt || 0,
+      cand.restartedAt || 0,
+      examConfig.globalRestartTimestamp || 0
+    );
+    const durationMs = examConfig.durationMinutes * 60 * 1000;
+    const isExpired = cand.status === 'IN_PROGRESS' && effectiveStart > 0 && Date.now() >= effectiveStart + durationMs;
+
+    if (cand.status === 'COMPLETED' || isExpired) {
+      if (isExpired && cand.status !== 'COMPLETED') {
+        const completedCand: Candidate = {
+          ...cand,
+          status: 'COMPLETED',
+          completedAt: cand.completedAt || (effectiveStart + durationMs),
+          timeTakenSeconds: cand.timeTakenSeconds || (examConfig.durationMinutes * 60),
+          score: calculateCandidateScore(cand.answers || {}, questions),
+        };
+        setAppState((prev) => ({
+          ...prev,
+          candidates: prev.candidates.map((c) => (c.id === cand.id ? completedCand : c)),
+        }));
+      }
       setCandidateStep('COMPLETED');
     } else if (cand.status === 'REVOKED') {
       setCandidateStep('REVOKED');
@@ -161,6 +221,29 @@ export const App: React.FC = () => {
   const handleStartExam = () => {
     if (!activeCandidate) return;
     const now = Date.now();
+
+    // Check if exam duration has already expired for this candidate
+    const effectiveStart = Math.max(
+      activeCandidate.startedAt || 0,
+      activeCandidate.restartedAt || 0,
+      examConfig.globalRestartTimestamp || 0
+    );
+    const durationMs = examConfig.durationMinutes * 60 * 1000;
+    if (activeCandidate.status === 'IN_PROGRESS' && effectiveStart > 0 && now >= effectiveStart + durationMs) {
+      const completedCand: Candidate = {
+        ...activeCandidate,
+        status: 'COMPLETED',
+        completedAt: activeCandidate.completedAt || (effectiveStart + durationMs),
+        timeTakenSeconds: activeCandidate.timeTakenSeconds || (examConfig.durationMinutes * 60),
+        score: calculateCandidateScore(activeCandidate.answers || {}, questions),
+      };
+      setAppState((prev) => ({
+        ...prev,
+        candidates: prev.candidates.map((c) => (c.id === completedCand.id ? completedCand : c)),
+      }));
+      setCandidateStep('COMPLETED');
+      return;
+    }
 
     // Shuffle questions per candidate if enabled
     const questionIds = questions.map((q) => q.id);

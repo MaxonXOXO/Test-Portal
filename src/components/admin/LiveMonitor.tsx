@@ -15,7 +15,7 @@ import {
   Printer,
 } from 'lucide-react';
 import type { Candidate, ExamConfig, Question } from '../../types';
-import { exportResultsExcel } from '../../services/storage';
+import { exportResultsExcel, getCandidateAppNo, checkAndAutoCompleteCandidates } from '../../services/storage';
 import { printCandidateAnswerSheet, printMasterCandidateList } from '../../services/printService';
 
 interface LiveMonitorProps {
@@ -44,22 +44,27 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
 
   const totalPossibleScore = questions.reduce((acc, q) => acc + q.marks, 0);
 
-  // Statistics calculation
-  const totalRegistered = candidates.length;
-  const inProgressCount = candidates.filter((c) => c.status === 'IN_PROGRESS').length;
-  const completedCount = candidates.filter((c) => c.status === 'COMPLETED').length;
-  const revokedCount = candidates.filter((c) => c.status === 'REVOKED').length;
+  // Auto-complete candidates whose exam time has expired
+  const { candidates: resolvedCandidates } = checkAndAutoCompleteCandidates(candidates, questions, examConfig);
 
-  const completedCandidates = candidates.filter((c) => c.status === 'COMPLETED');
+  // Statistics calculation
+  const totalRegistered = resolvedCandidates.length;
+  const inProgressCount = resolvedCandidates.filter((c) => c.status === 'IN_PROGRESS').length;
+  const completedCount = resolvedCandidates.filter((c) => c.status === 'COMPLETED').length;
+  const revokedCount = resolvedCandidates.filter((c) => c.status === 'REVOKED').length;
+
+  const completedCandidates = resolvedCandidates.filter((c) => c.status === 'COMPLETED');
   const avgScore = completedCandidates.length
     ? (completedCandidates.reduce((sum, c) => sum + c.score, 0) / completedCandidates.length).toFixed(1)
     : '0';
 
   // Filtered list
-  const filteredCandidates = candidates.filter((c) => {
+  const filteredCandidates = resolvedCandidates.filter((c) => {
+    const appNo = c.applicationNumber || getCandidateAppNo(c);
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.phone.includes(searchTerm);
+      c.phone.includes(searchTerm) ||
+      appNo.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -197,6 +202,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
             <thead>
               <tr>
                 <th>Candidate Name</th>
+                <th>Application No.</th>
                 <th>Phone</th>
                 <th>Status</th>
                 <th>Progress</th>
@@ -212,6 +218,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
                   const answered = Object.keys(c.answers || {}).length;
                   const total = questions.length;
                   const percentage = totalPossibleScore > 0 ? ((c.score / totalPossibleScore) * 100).toFixed(0) : '0';
+                  const appNo = c.applicationNumber || getCandidateAppNo(c);
 
                   let statusBadgeClass = 'badge-gray';
                   if (c.status === 'IN_PROGRESS') statusBadgeClass = 'badge-amber';
@@ -222,6 +229,9 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
                     <tr key={c.id}>
                       <td>
                         <div style={{ fontWeight: 700, color: 'var(--neutral-900)' }}>{c.name}</div>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.84rem' }}>{appNo}</span>
                       </td>
                       <td>
                         <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{c.phone}</span>
@@ -373,7 +383,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
               <div>
                 <h3>Candidate Response Log</h3>
                 <p style={{ fontSize: '0.8rem', color: 'var(--neutral-500)' }}>
-                  {inspectCandidate.name} &bull; Contact: {inspectCandidate.phone}
+                  {inspectCandidate.name} &bull; App No: {inspectCandidate.applicationNumber || getCandidateAppNo(inspectCandidate)} &bull; Contact: {inspectCandidate.phone}
                 </p>
               </div>
               <button

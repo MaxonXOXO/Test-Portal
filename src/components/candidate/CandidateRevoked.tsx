@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import type { Candidate } from '../../types';
+import { getCandidateAppNo } from '../../services/storage';
 
 interface CandidateRevokedProps {
   candidate: Candidate;
@@ -45,6 +46,12 @@ export const CandidateRevoked: React.FC<CandidateRevokedProps> = ({
             <div className="receipt-row">
               <span className="receipt-label">Candidate Name</span>
               <span className="receipt-val">{candidate.name}</span>
+            </div>
+            <div className="receipt-row">
+              <span className="receipt-label">Application Number</span>
+              <span className="receipt-val" style={{ fontFamily: 'monospace' }}>
+                {candidate.applicationNumber || getCandidateAppNo(candidate)}
+              </span>
             </div>
             <div className="receipt-row">
               <span className="receipt-label">Registered Contact</span>

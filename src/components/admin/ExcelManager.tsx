@@ -18,6 +18,7 @@ import {
   parseCandidateExcel,
   parseQuestionExcel,
   normalizePhone,
+  getCandidateAppNo,
 } from '../../services/storage';
 
 interface ExcelManagerProps {
@@ -53,6 +54,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
   const [newCand, setNewCand] = useState({
     name: '',
     phone: '',
+    applicationNumber: '',
   });
 
   // Manual Question Form State
@@ -153,8 +155,11 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
       return;
     }
 
+    const applicationNumber = newCand.applicationNumber.trim() || `CARMEL-2026-${String(candidates.length + 1).padStart(3, '0')}`;
+
     const created: Candidate = {
       id: `cand_${Date.now()}`,
+      applicationNumber,
       phone,
       name: newCand.name.trim(),
       status: 'NOT_STARTED',
@@ -167,7 +172,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
     };
 
     onUpdateCandidates([...candidates, created]);
-    setNewCand({ name: '', phone: '' });
+    setNewCand({ name: '', phone: '', applicationNumber: '' });
     setShowAddCandidateModal(false);
   };
 
@@ -304,8 +309,9 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                 }}>
                   <strong>Required Columns:</strong>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
-                    <span className="badge badge-blue">Phone Number</span>
+                    <span className="badge badge-blue">Application Number (Optional)</span>
                     <span className="badge badge-blue">Candidate Name</span>
+                    <span className="badge badge-blue">Phone Number</span>
                   </div>
                 </div>
               </div>
@@ -356,6 +362,7 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                 <thead>
                   <tr>
                     <th style={{ width: '40px' }}>#</th>
+                    <th>Application No.</th>
                     <th>Candidate Name</th>
                     <th>Mobile Phone</th>
                     <th>Exam Status</th>
@@ -366,6 +373,9 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
                   {candidates.map((c, idx) => (
                     <tr key={c.id}>
                       <td style={{ fontWeight: 600, color: 'var(--neutral-500)' }}>{idx + 1}</td>
+                      <td style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.85rem' }}>
+                        {c.applicationNumber || getCandidateAppNo(c, idx)}
+                      </td>
                       <td style={{ fontWeight: 600, color: 'var(--neutral-900)' }}>{c.name}</td>
                       <td style={{ fontFamily: 'monospace' }}>{c.phone}</td>
                       <td>
@@ -586,6 +596,16 @@ export const ExcelManager: React.FC<ExcelManagerProps> = ({
             </div>
             <form onSubmit={handleSaveCandidate}>
               <div className="modal-body">
+                <div className="form-group">
+                  <label>Application Number (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CARMEL-2026-006 (Auto-generated if blank)"
+                    value={newCand.applicationNumber}
+                    onChange={(e) => setNewCand({ ...newCand, applicationNumber: e.target.value })}
+                    style={{ padding: '0.65rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--neutral-300)' }}
+                  />
+                </div>
                 <div className="form-group">
                   <label>Full Name</label>
                   <input

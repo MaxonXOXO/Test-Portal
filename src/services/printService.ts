@@ -1,4 +1,5 @@
 import type { Candidate, Question, ExamConfig } from '../types';
+import { calculateCandidateScore, getCandidateAppNo, checkAndAutoCompleteCandidates } from './storage';
 
 /**
  * Service to generate and open standalone, print-optimized documents in a new tab.
@@ -12,9 +13,26 @@ export function printCandidateAnswerSheet(
   config: ExamConfig
 ): void {
   const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
-  const attemptedCount = Object.keys(candidate.answers || {}).length;
 
-  const durationSecs = candidate.timeTakenSeconds || 0;
+  // Check if candidate time has run out but status was still IN_PROGRESS
+  const effectiveStart = Math.max(
+    candidate.startedAt || 0,
+    candidate.restartedAt || 0,
+    config.globalRestartTimestamp || 0
+  );
+  const totalDurationSeconds = config.durationMinutes * 60;
+  const isTimeUp = effectiveStart > 0 && Date.now() >= effectiveStart + totalDurationSeconds * 1000;
+
+  const currentAnswers = candidate.answers || {};
+  const currentStatus = isTimeUp && candidate.status === 'IN_PROGRESS' ? 'COMPLETED' : candidate.status;
+  const currentScore = isTimeUp && candidate.status === 'IN_PROGRESS'
+    ? calculateCandidateScore(currentAnswers, questions)
+    : candidate.score;
+  const completedTimestamp = candidate.completedAt || (isTimeUp ? effectiveStart + totalDurationSeconds * 1000 : null);
+  const durationSecs = candidate.timeTakenSeconds || (isTimeUp ? totalDurationSeconds : 0);
+
+  const attemptedCount = Object.keys(currentAnswers).length;
+
   const mins = Math.floor(durationSecs / 60);
   const secs = durationSecs % 60;
   const durationFormatted = durationSecs > 0 ? `${mins}m ${secs}s` : 'N/A';
@@ -22,15 +40,16 @@ export function printCandidateAnswerSheet(
   const avgTimeSecs = attemptedCount > 0 ? Math.round(durationSecs / attemptedCount) : 0;
   const avgTimeFormatted = avgTimeSecs > 0 ? `${Math.floor(avgTimeSecs / 60)}m ${avgTimeSecs % 60}s` : 'N/A';
 
-  const percentage = totalMarks > 0 ? ((candidate.score / totalMarks) * 100).toFixed(1) : '0';
+  const percentage = totalMarks > 0 ? ((currentScore / totalMarks) * 100).toFixed(1) : '0';
   const examStartTime = candidate.startedAt ? new Date(candidate.startedAt).toLocaleString() : 'Not Started';
-  const examEndTime = candidate.completedAt ? new Date(candidate.completedAt).toLocaleString() : 'In Progress';
+  const examEndTime = completedTimestamp ? new Date(completedTimestamp).toLocaleString() : 'In Progress';
   const currentDateStr = new Date().toLocaleString();
+  const appNo = candidate.applicationNumber || getCandidateAppNo(candidate);
 
   // Build question rows
   const questionRowsHtml = questions
     .map((q, idx) => {
-      const selectedOpt = candidate.answers ? candidate.answers[q.id] : undefined;
+      const selectedOpt = currentAnswers ? currentAnswers[q.id] : undefined;
       const isCorrect = selectedOpt === q.correctOption;
       const isAnswered = Boolean(selectedOpt);
 
@@ -209,8 +228,21 @@ export function printCandidateAnswerSheet(
     .info-row {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       padding: 2.5px 0;
       font-size: 12px;
+    }
+    .info-row.sig-row {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px dotted #cbd5e1;
+      align-items: flex-end;
+    }
+    .participant-sig-line {
+      display: inline-block;
+      width: 140px;
+      border-bottom: 1.5px dashed #475569;
+      height: 18px;
     }
     .info-label { color: #64748b; font-weight: 500; }
     .info-val { color: #0f172a; font-weight: 700; }
@@ -394,7 +426,12 @@ export function printCandidateAnswerSheet(
     <div class="info-grid">
       <div class="info-box">
         <div class="info-row"><span class="info-label">Candidate Name:</span><span class="info-val">${escapeHtml(candidate.name)}</span></div>
+        <div class="info-row"><span class="info-label">Application Number:</span><span class="info-val" style="font-family:monospace; font-size:12px;">${escapeHtml(appNo)}</span></div>
         <div class="info-row"><span class="info-label">Registered Phone:</span><span class="info-val">${escapeHtml(candidate.phone)}</span></div>
+        <div class="info-row sig-row">
+          <span class="info-label">Signature of Participant:</span>
+          <span class="participant-sig-line"></span>
+        </div>
       </div>
       <div class="info-box">
         <div class="info-row"><span class="info-label">Exam Start Time:</span><span class="info-val">${escapeHtml(examStartTime)}</span></div>
@@ -408,9 +445,9 @@ export function printCandidateAnswerSheet(
     <div class="score-banner">
       <div class="metric-col"><span class="lbl">Total Questions</span><span class="val">${questions.length}</span></div>
       <div class="metric-col"><span class="lbl">Attempted</span><span class="val">${attemptedCount}</span></div>
-      <div class="metric-col"><span class="lbl">Score Awarded</span><span class="val highlight">${candidate.score} / ${totalMarks}</span></div>
+      <div class="metric-col"><span class="lbl">Score Awarded</span><span class="val highlight">${currentScore} / ${totalMarks}</span></div>
       <div class="metric-col"><span class="lbl">Percentage</span><span class="val">${percentage}%</span></div>
-      <div class="metric-col"><span class="lbl">Status</span><span class="val" style="font-size:13px; color:#059669;">${escapeHtml(candidate.status)}</span></div>
+      <div class="metric-col"><span class="lbl">Status</span><span class="val" style="font-size:13px; color:#059669;">${escapeHtml(currentStatus)}</span></div>
     </div>
 
     <!-- Questions Table -->
@@ -466,20 +503,22 @@ export function printMasterCandidateList(
   questions: Question[],
   config: ExamConfig
 ): void {
+  const { candidates: resolvedCandidates } = checkAndAutoCompleteCandidates(candidates, questions, config);
   const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
-  const completed = candidates.filter((c) => c.status === 'COMPLETED');
+  const completed = resolvedCandidates.filter((c) => c.status === 'COMPLETED');
   const avgScore = completed.length
     ? (completed.reduce((acc, c) => acc + c.score, 0) / completed.length).toFixed(1)
     : '0';
   const maxScore = completed.length ? Math.max(...completed.map((c) => c.score)) : 0;
   const currentDateStr = new Date().toLocaleString();
 
-  const rowsHtml = candidates
+  const rowsHtml = resolvedCandidates
     .map((c, index) => {
       const attempted = Object.keys(c.answers || {}).length;
       const durationSecs = c.timeTakenSeconds || 0;
       const durFormatted = durationSecs > 0 ? `${Math.floor(durationSecs / 60)}m ${durationSecs % 60}s` : '—';
       const percentage = totalMarks > 0 ? ((c.score / totalMarks) * 100).toFixed(1) : '0';
+      const appNo = c.applicationNumber || getCandidateAppNo(c, index);
 
       const startTimeStr = c.startedAt
         ? new Date(c.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -491,6 +530,7 @@ export function printMasterCandidateList(
       return `
         <tr>
           <td style="text-align:center; font-weight:600;">${index + 1}</td>
+          <td style="font-family:monospace; font-size:11px; font-weight:600;">${escapeHtml(appNo)}</td>
           <td style="font-weight:600;">${escapeHtml(c.name)}</td>
           <td style="font-family:monospace; font-size:11px;">${escapeHtml(c.phone)}</td>
           <td style="text-align:center;">
@@ -766,6 +806,7 @@ export function printMasterCandidateList(
       <thead>
         <tr>
           <th style="width:30px; text-align:center;">Sl</th>
+          <th>Application No</th>
           <th>Candidate Name</th>
           <th>Mobile Phone</th>
           <th style="text-align:center;">Status</th>

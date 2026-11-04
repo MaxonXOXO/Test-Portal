@@ -2,6 +2,7 @@ export type CandidateStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'REV
 
 export interface Candidate {
   id: string;
+  applicationNumber?: string;
   phone: string;
   name: string;
   rollNo?: string;

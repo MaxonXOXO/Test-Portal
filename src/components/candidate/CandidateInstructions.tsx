@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, HelpCircle, ShieldAlert, PlayCircle, ArrowLeft } from 'lucide-react';
 import type { Candidate, ExamConfig, Question } from '../../types';
+import { getCandidateAppNo } from '../../services/storage';
 
 interface CandidateInstructionsProps {
   candidate: Candidate;
@@ -34,10 +35,16 @@ export const CandidateInstructions: React.FC<CandidateInstructionsProps> = ({
               </span>
               <span className="badge badge-green">VERIFIED ATTENDEE</span>
             </div>
-            <div className="cand-preview-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+            <div className="cand-preview-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem' }}>
               <div className="cand-preview-item">
                 <span className="label">Candidate Name</span>
                 <span className="val">{candidate.name}</span>
+              </div>
+              <div className="cand-preview-item">
+                <span className="label">Application No</span>
+                <span className="val" style={{ fontFamily: 'monospace' }}>
+                  {candidate.applicationNumber || getCandidateAppNo(candidate)}
+                </span>
               </div>
               <div className="cand-preview-item">
                 <span className="label">Registered Contact</span>
