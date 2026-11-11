@@ -1,6 +1,6 @@
-# Carmel Polytechnic College Punnapra - Online Assessment Portal
+# Carmel Polytechnic College - Online Assessment Portal
 
-A comprehensive, secure, and modern administrative examination and questionnaire hosting platform built with React, TypeScript, and Vite for **Carmel Polytechnic College Punnapra** (Govt. Aided Technical Institution | Punnapra, Alappuzha, Kerala).
+A comprehensive, secure, and modern administrative examination and questionnaire hosting platform built with React, TypeScript, and Vite for **Carmel Polytechnic College ** 
 
 ---
 
